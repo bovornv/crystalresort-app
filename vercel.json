@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/roomstatus/index.html",
+      "destination": "/roomstatus/dist/index.html"
+    },
+    {
       "source": "/roomstatus/assets/:path*",
       "destination": "/roomstatus/dist/assets/:path*"
     },
@@ -30,7 +34,7 @@
     },
     {
       "source": "/roomstatus/:path*",
-      "destination": "/roomstatus/dist/index.html"
+      "destination": "/roomstatus/dist/:path*"
     },
     {
       "source": "/purchase",
