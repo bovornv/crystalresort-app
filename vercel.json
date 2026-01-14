@@ -14,68 +14,31 @@
       "src": "/roomstatus/",
       "dest": "/roomstatus/dist/index.html",
       "status": 200
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/roomstatus/assets/:path*",
-      "destination": "/roomstatus/dist/assets/:path*"
     },
     {
-      "source": "/roomstatus/docs/:path*",
-      "destination": "/roomstatus/dist/docs/:path*"
+      "src": "/roomstatus/(.*)",
+      "dest": "/roomstatus/dist/$1",
+      "status": 200
     },
     {
-      "source": "/roomstatus/reports/:path*",
-      "destination": "/roomstatus/dist/reports/:path*"
+      "src": "/purchase",
+      "dest": "/purchase/index.html",
+      "status": 200
     },
     {
-      "source": "/roomstatus/favicon.png",
-      "destination": "/roomstatus/dist/favicon.png"
+      "src": "/purchase/",
+      "dest": "/purchase/index.html",
+      "status": 200
     },
     {
-      "source": "/roomstatus/pdf.worker.min.mjs",
-      "destination": "/roomstatus/dist/pdf.worker.min.mjs"
+      "src": "/purchase/(.*)",
+      "dest": "/purchase/$1",
+      "status": 200
     },
     {
-      "source": "/roomstatus/:path*",
-      "destination": "/roomstatus/dist/:path*"
-    },
-    {
-      "source": "/purchase",
-      "destination": "/purchase/index.html"
-    },
-    {
-      "source": "/purchase/",
-      "destination": "/purchase/index.html"
-    },
-    {
-      "source": "/purchase/:path*",
-      "destination": "/purchase/:path*"
-    },
-    {
-      "source": "/",
-      "destination": "/dashboard/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/roomstatus/dist/assets/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/purchase/:path*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
+      "src": "/",
+      "dest": "/dashboard/index.html",
+      "status": 200
     }
   ]
 }
