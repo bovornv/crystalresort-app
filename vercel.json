@@ -1,9 +1,22 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/roomstatus/index.html",
-      "destination": "/roomstatus/dist/index.html"
+      "src": "/roomstatus/index.html",
+      "dest": "/roomstatus/dist/index.html",
+      "status": 200
     },
+    {
+      "src": "/roomstatus",
+      "dest": "/roomstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/roomstatus/",
+      "dest": "/roomstatus/dist/index.html",
+      "status": 200
+    }
+  ],
+  "rewrites": [
     {
       "source": "/roomstatus/assets/:path*",
       "destination": "/roomstatus/dist/assets/:path*"
@@ -23,14 +36,6 @@
     {
       "source": "/roomstatus/pdf.worker.min.mjs",
       "destination": "/roomstatus/dist/pdf.worker.min.mjs"
-    },
-    {
-      "source": "/roomstatus",
-      "destination": "/roomstatus/dist/index.html"
-    },
-    {
-      "source": "/roomstatus/",
-      "destination": "/roomstatus/dist/index.html"
     },
     {
       "source": "/roomstatus/:path*",
