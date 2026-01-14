@@ -1,0 +1,72 @@
+{
+  "rewrites": [
+    {
+      "source": "/roomstatus/assets/:path*",
+      "destination": "/roomstatus/dist/assets/:path*"
+    },
+    {
+      "source": "/roomstatus/docs/:path*",
+      "destination": "/roomstatus/dist/docs/:path*"
+    },
+    {
+      "source": "/roomstatus/reports/:path*",
+      "destination": "/roomstatus/dist/reports/:path*"
+    },
+    {
+      "source": "/roomstatus/favicon.png",
+      "destination": "/roomstatus/dist/favicon.png"
+    },
+    {
+      "source": "/roomstatus/pdf.worker.min.mjs",
+      "destination": "/roomstatus/dist/pdf.worker.min.mjs"
+    },
+    {
+      "source": "/roomstatus",
+      "destination": "/roomstatus/dist/index.html"
+    },
+    {
+      "source": "/roomstatus/",
+      "destination": "/roomstatus/dist/index.html"
+    },
+    {
+      "source": "/roomstatus/:path*",
+      "destination": "/roomstatus/dist/index.html"
+    },
+    {
+      "source": "/purchase",
+      "destination": "/purchase/index.html"
+    },
+    {
+      "source": "/purchase/",
+      "destination": "/purchase/index.html"
+    },
+    {
+      "source": "/purchase/:path*",
+      "destination": "/purchase/:path*"
+    },
+    {
+      "source": "/",
+      "destination": "/dashboard/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/roomstatus/dist/assets/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/purchase/:path*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
+}
