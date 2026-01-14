@@ -1,12 +1,11 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "framework": "vite",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/roomstatus",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/roomstatus/",
       "destination": "/index.html"
     }
   ]
