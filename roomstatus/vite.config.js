@@ -7,36 +7,17 @@ import fs from 'fs'
 export default defineConfig(({ command }) => {
   const isDev = command === 'serve'
   
-  // Plugin to use index.dev.html for development
-  const devHtmlPlugin = {
+  // Plugin to use index.dev.html for development only
+  const devHtmlPlugin = isDev ? {
     name: 'dev-html-entry',
-    configureServer(server) {
-      return () => {
-        server.middlewares.use((req, res, next) => {
-          // Intercept requests for index.html in dev mode
-          if (isDev && (req.url === '/index.html' || req.url === '/roomstatus/index.html')) {
-            const devHtmlPath = resolve(process.cwd(), 'index.dev.html')
-            if (fs.existsSync(devHtmlPath)) {
-              const html = fs.readFileSync(devHtmlPath, 'utf-8')
-              res.setHeader('Content-Type', 'text/html')
-              res.end(html)
-              return
-            }
-          }
-          next()
-        })
-      }
-    },
     transformIndexHtml(html) {
-      if (isDev) {
-        const devHtmlPath = resolve(process.cwd(), 'index.dev.html')
-        if (fs.existsSync(devHtmlPath)) {
-          return fs.readFileSync(devHtmlPath, 'utf-8')
-        }
+      const devHtmlPath = resolve(process.cwd(), 'index.dev.html')
+      if (fs.existsSync(devHtmlPath)) {
+        return fs.readFileSync(devHtmlPath, 'utf-8')
       }
       return html
     },
-  }
+  } : null
   
   return {
     base: '/roomstatus/',
@@ -44,13 +25,10 @@ export default defineConfig(({ command }) => {
       outDir: 'dist',
       assetsDir: 'assets',
       emptyOutDir: true,
-      rollupOptions: {
-        input: resolve(__dirname, 'index.html'),
-      },
     },
     plugins: [
       react(),
-      ...(isDev ? [devHtmlPlugin] : []),
+      ...(devHtmlPlugin ? [devHtmlPlugin] : []),
     ],
     optimizeDeps: {
       exclude: ['pdfjs-dist'],
