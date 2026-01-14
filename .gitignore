@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Scripts with credentials (never commit these)
+push.sh
+push_all.sh
+*.sh
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Credentials
+*.key
+*.pem
+credentials.json
