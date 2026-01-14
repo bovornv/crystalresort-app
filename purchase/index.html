@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บอร์ดจัดซื้อของ คริสตัลรีสอร์ต - Crystal Resort</title>
+    <link rel="stylesheet" href="purchase.css">
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <!-- Fixed Top Bar v2 -->
+    <div class="top-bar-fixed">
+        <div class="top-bar-content">
+            <div class="top-bar-left">
+                <h1 data-i18n="title">Crystal Resort Procurement Board</h1>
+                <div class="top-bar-date" id="todayDate"></div>
+            </div>
+            <div class="top-bar-right">
+                <div class="user-menu-container" id="userMenuContainer" style="display: none;">
+                    <button class="user-menu-btn" id="userMenuBtn" onclick="toggleUserMenu()">
+                        <span id="userMenuNickname">U</span>
+                    </button>
+                    <div class="user-menu-dropdown" id="userMenuDropdown">
+                        <div class="user-menu-header">
+                            <div class="user-menu-name" id="userMenuName">User</div>
+                            <div class="user-menu-label" data-i18n="loggedInUser">ผู้ใช้ที่เข้าสู่ระบบ</div>
+                        </div>
+                        <div class="user-menu-divider"></div>
+                        <div class="user-menu-item" onclick="handleLogout()">
+                            <span class="user-menu-icon">🚪</span>
+                            <span class="user-menu-text" data-i18n="logout">ออกจากระบบ</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Language switcher hidden - Thai only for now -->
+                <div class="language-switcher" style="display: none;">
+                    <button class="lang-btn" id="langBtnTh" onclick="switchLanguage('th')" title="ไทย">ไทย</button>
+                    <button class="lang-btn" id="langBtnEn" onclick="switchLanguage('en')" title="English">EN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="app-container">
+        <!-- Procurement Board View -->
+        <div id="boardView" class="view-container">
+
+        <div class="board-container">
+            <!-- Need to Buy Column -->
+            <div class="column" data-column="need-to-buy">
+                <div class="column-header" onclick="toggleColumn('need-to-buy')">
+                    <div class="column-header-left">
+                        <button class="column-toggle-btn" data-column="need-to-buy">▼</button>
+                        <h2><span data-i18n="needToBuy">Need to Buy</span> <span class="item-count" id="count-need-to-buy">0</span></h2>
+                    </div>
+                    <button class="add-item-btn" onclick="event.stopPropagation(); showAddItemModal()" data-i18n="addItem">+ Add Item</button>
+                </div>
+                <div class="items-container collapsed" id="need-to-buy-items"></div>
+            </div>
+
+            <!-- Ordered Column -->
+            <div class="column" data-column="ordered">
+                <div class="column-header" onclick="toggleColumn('ordered')">
+                    <div class="column-header-left">
+                        <button class="column-toggle-btn" data-column="ordered">▼</button>
+                        <h2><span data-i18n="ordered">Ordered</span> <span class="item-count" id="count-ordered">0</span></h2>
+                    </div>
+                </div>
+                <div class="items-container collapsed" id="ordered-items"></div>
+            </div>
+
+            <!-- Bought / In Transit Column -->
+            <div class="column" data-column="bought">
+                <div class="column-header" onclick="toggleColumn('bought')">
+                    <div class="column-header-left">
+                        <button class="column-toggle-btn" data-column="bought">▼</button>
+                        <h2><span data-i18n="bought">Bought / In Transit</span> <span class="item-count" id="count-bought">0</span></h2>
+                    </div>
+                </div>
+                <div class="items-container collapsed" id="bought-items"></div>
+            </div>
+
+            <!-- Received Column -->
+            <div class="column" data-column="received">
+                <div class="column-header" onclick="toggleColumn('received')">
+                    <div class="column-header-left">
+                        <button class="column-toggle-btn" data-column="received">▼</button>
+                        <h2><span data-i18n="received">Received</span> <span class="item-count" id="count-received">0</span></h2>
+                    </div>
+                </div>
+                <div class="items-container collapsed" id="received-items"></div>
+            </div>
+
+            <!-- Verified / Issue Column -->
+            <div class="column" data-column="verified">
+                <div class="column-header" onclick="toggleColumn('verified')">
+                    <div class="column-header-left">
+                        <button class="column-toggle-btn" data-column="verified">▼</button>
+                        <h2><span data-i18n="verified">Verified / Issue</span> <span class="item-count" id="count-verified">0</span></h2>
+                    </div>
+                </div>
+                <div class="items-container collapsed" id="verified-items"></div>
+            </div>
+        </div>
+        
+        <div class="bottom-actions-bar">
+            <div class="actions-container">
+                <button class="action-header-btn" onclick="showStatsModal()" data-i18n="viewPurchaseHistory" title="View Purchase History">📊 <span data-i18n="purchaseHistory">Purchase History</span></button>
+                <button class="action-header-btn" onclick="showWeeklyReviewModal()" data-i18n="viewWeeklyReview" title="View Weekly Review">📋 <span data-i18n="weeklyReview">Weekly Review</span></button>
+            </div>
+        </div>
+        </div>
+
+        <!-- Manager Dashboard View -->
+        <div id="dashboardView" class="view-container" style="display: none;">
+            <div class="dashboard-header">
+                <h2 data-i18n="managerDashboardTitle">Manager Dashboard – Crystal Resort Procurement</h2>
+                <div class="time-range-selector">
+                    <button class="time-range-btn active" data-range="today" onclick="setTimeRange('today')">Today</button>
+                    <button class="time-range-btn" data-range="7days" onclick="setTimeRange('7days')">Last 7 Days</button>
+                    <button class="time-range-btn" data-range="30days" onclick="setTimeRange('30days')">Last 30 Days</button>
+                </div>
+            </div>
+
+            <!-- Dashboard Widgets -->
+            <div class="dashboard-grid">
+                <!-- Pending Items Summary -->
+                <div class="dashboard-widget">
+                    <div class="widget-header">
+                        <h3>Pending Items</h3>
+                    </div>
+                    <div class="widget-content">
+                        <div class="widget-stat-large" id="pendingCount">0</div>
+                        <div class="widget-subtitle">Items in progress</div>
+                        <div class="widget-list" id="pendingStuckItems"></div>
+                    </div>
+                </div>
+
+                <!-- Issues Today -->
+                <div class="dashboard-widget">
+                    <div class="widget-header">
+                        <h3>Issues <span id="issuesTimeRange">Today</span></h3>
+                    </div>
+                    <div class="widget-content">
+                        <div class="widget-stat-large" id="issuesCount">0</div>
+                        <div class="widget-subtitle">Total issues</div>
+                        <div class="widget-list" id="issuesBreakdown"></div>
+                    </div>
+                </div>
+
+                <!-- Urgent Items -->
+                <div class="dashboard-widget">
+                    <div class="widget-header">
+                        <h3>Urgent Items 🔥</h3>
+                    </div>
+                    <div class="widget-content">
+                        <div class="widget-stat-large" id="urgentCount">0</div>
+                        <div class="widget-subtitle">Requires attention</div>
+                        <div class="widget-list" id="urgentItemsList"></div>
+                    </div>
+                </div>
+
+                <!-- Delayed / Stuck Items -->
+                <div class="dashboard-widget widget-wide">
+                    <div class="widget-header">
+                        <h3>Delayed / Stuck Items</h3>
+                        <span class="widget-badge" id="delayedCount">0</span>
+                    </div>
+                    <div class="widget-content">
+                        <div class="widget-subtitle">Items unchanged for 12+ hours</div>
+                        <div class="widget-list" id="delayedItemsList"></div>
+                    </div>
+                </div>
+
+                <!-- Supplier Issues -->
+                <div class="dashboard-widget">
+                    <div class="widget-header">
+                        <h3>Supplier Issues</h3>
+                    </div>
+                    <div class="widget-content">
+                        <div class="widget-subtitle">Issues by supplier</div>
+                        <div class="widget-list" id="supplierIssuesList"></div>
+                    </div>
+                </div>
+
+                <!-- Team Workload -->
+                <div class="dashboard-widget widget-wide">
+                    <div class="widget-header">
+                        <h3>Team Workload & Accountability</h3>
+                    </div>
+                    <div class="widget-content">
+                        <div class="widget-subtitle">Items assigned per person</div>
+                        <div class="widget-list" id="teamWorkloadList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Manager View -->
+        <div id="mobileView" class="view-container mobile-manager-view" style="display: none;">
+            <!-- Mobile Header -->
+            <div class="mobile-header">
+                <h2 data-i18n="kitchenOps">Kitchen Ops</h2>
+                <div class="mobile-time-range">
+                    <button class="mobile-time-btn active" data-range="today" onclick="setMobileTimeRange('today')" data-i18n="today">Today</button>
+                    <button class="mobile-time-btn" data-range="7days" onclick="setMobileTimeRange('7days')" data-i18n="7days">7 Days</button>
+                    <button class="mobile-time-btn" data-range="30days" onclick="setMobileTimeRange('30days')" data-i18n="30days">30 Days</button>
+                </div>
+                <div class="mobile-last-updated" id="mobileLastUpdated"></div>
+            </div>
+
+            <!-- Health Snapshot -->
+            <div class="mobile-health-snapshot">
+                <div class="mobile-health-card" id="mobilePendingCard">
+                    <div class="mobile-health-label" data-i18n="pending">Pending</div>
+                    <div class="mobile-health-value" id="mobilePendingCount">0</div>
+                </div>
+                <div class="mobile-health-card mobile-health-issue" id="mobileIssuesCard">
+                    <div class="mobile-health-label" data-i18n="issues">Issues</div>
+                    <div class="mobile-health-value" id="mobileIssuesCount">0</div>
+                </div>
+                <div class="mobile-health-card mobile-health-urgent" id="mobileUrgentCard">
+                    <div class="mobile-health-label" data-i18n="urgent">Urgent</div>
+                    <div class="mobile-health-value" id="mobileUrgentCount">0</div>
+                </div>
+                <div class="mobile-health-card mobile-health-delayed" id="mobileDelayedCard">
+                    <div class="mobile-health-label" data-i18n="delayed">Delayed</div>
+                    <div class="mobile-health-value" id="mobileDelayedCount">0</div>
+                </div>
+            </div>
+
+            <!-- Needs Attention List -->
+            <div class="mobile-section">
+                <h3 class="mobile-section-title" data-i18n="needsAttention">Needs Attention</h3>
+                <div class="mobile-attention-list" id="mobileAttentionList"></div>
+            </div>
+
+            <!-- Supplier Issues -->
+            <div class="mobile-section">
+                <h3 class="mobile-section-title" data-i18n="supplierIssues">Supplier Issues</h3>
+                <div class="mobile-supplier-list" id="mobileSupplierList"></div>
+            </div>
+
+            <!-- Team Load -->
+            <div class="mobile-section">
+                <h3 class="mobile-section-title" data-i18n="teamLoad">Team Load</h3>
+                <div class="mobile-team-list" id="mobileTeamList"></div>
+            </div>
+
+            <!-- Bottom Navigation -->
+            <div class="mobile-bottom-nav">
+                <button class="mobile-nav-btn active" onclick="switchView('mobile')" data-i18n="dashboard">Dashboard</button>
+                <button class="mobile-nav-btn" onclick="switchView('board')" data-i18n="procurementBoard">Procurement Board</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Item Detail Modal -->
+    <div id="mobileItemDetailModal" class="modal mobile-modal">
+        <div class="mobile-modal-content">
+            <div class="mobile-modal-header">
+                <h3 id="mobileItemDetailTitle">Item Details</h3>
+                <button class="close-btn" onclick="closeMobileItemDetail()">&times;</button>
+            </div>
+            <div class="mobile-modal-body" id="mobileItemDetailBody"></div>
+        </div>
+    </div>
+
+    <!-- Add Item Modal -->
+    <div id="addItemModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-i18n="addNewItem">Add New Item</h2>
+                <button class="close-btn" onclick="closeAddItemModal()">&times;</button>
+            </div>
+            <form id="addItemForm" onsubmit="handleAddItem(event)">
+                <div class="form-group">
+                    <label for="itemName" data-i18n="itemName">Item Name *</label>
+                    <input type="text" id="itemName" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="itemQuantity" data-i18n="quantity">Quantity *</label>
+                        <input type="number" id="itemQuantity" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="itemUnit" data-i18n="unit">Unit *</label>
+                        <select id="itemUnit" required>
+                            <option value="kg" data-i18n="unitKg">kg</option>
+                            <option value="bottle" data-i18n="unitBottle">bottle</option>
+                            <option value="piece" data-i18n="unitPiece">piece</option>
+                            <option value="pack" data-i18n="unitPack">pack</option>
+                            <option value="box" data-i18n="unitBox">box</option>
+                            <option value="liter" data-i18n="unitLiter">liter</option>
+                            <option value="bag" data-i18n="unitBag">Bag</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="itemSupplier" data-i18n="supplier">Supplier *</label>
+                    <select id="itemSupplier" required>
+                        <option value="Makro" data-i18n="supplierMakro">Makro</option>
+                        <option value="Fresh Market" data-i18n="supplierFreshMarket">Market</option>
+                        <option value="Bakery" data-i18n="supplierBakery">Sunisa</option>
+                        <option value="Other" data-i18n="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="urgency-checkbox-label">
+                        <input type="checkbox" id="itemUrgency" value="urgent">
+                        <span data-i18n="quick">ด่วน</span>
+                    </label>
+                    <small class="form-hint" data-i18n="urgencyHint">Default is Normal. Check to mark as Urgent.</small>
+                </div>
+                <div class="form-group">
+                    <label for="itemNotes" data-i18n="notes">Notes</label>
+                    <textarea id="itemNotes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeAddItemModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" data-i18n="addItemButton">Add Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Item Modal -->
+    <div id="editItemModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-i18n="editItem">Edit Item</h2>
+                <button class="close-btn" onclick="closeEditItemModal()">&times;</button>
+            </div>
+            <form id="editItemForm" onsubmit="handleEditItem(event)">
+                <input type="hidden" id="editItemId">
+                <div class="form-group">
+                    <label for="editItemName" data-i18n="itemName">Item Name *</label>
+                    <input type="text" id="editItemName" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editItemQuantity" data-i18n="quantity">Quantity *</label>
+                        <input type="number" id="editItemQuantity" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editItemUnit" data-i18n="unit">Unit *</label>
+                        <select id="editItemUnit" required>
+                            <option value="kg" data-i18n="unitKg">kg</option>
+                            <option value="bottle" data-i18n="unitBottle">bottle</option>
+                            <option value="piece" data-i18n="unitPiece">piece</option>
+                            <option value="pack" data-i18n="unitPack">pack</option>
+                            <option value="box" data-i18n="unitBox">box</option>
+                            <option value="liter" data-i18n="unitLiter">liter</option>
+                            <option value="bag" data-i18n="unitBag">Bag</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="editItemSupplier" data-i18n="supplier">Supplier *</label>
+                    <select id="editItemSupplier" required>
+                        <option value="Makro" data-i18n="supplierMakro">Makro</option>
+                        <option value="Fresh Market" data-i18n="supplierFreshMarket">Market</option>
+                        <option value="Bakery" data-i18n="supplierBakery">Sunisa</option>
+                        <option value="Other" data-i18n="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="urgency-checkbox-label">
+                        <input type="checkbox" id="editItemUrgency">
+                        <span data-i18n="quick">ด่วน</span>
+                    </label>
+                    <small class="form-hint" data-i18n="urgencyHint">Default is Normal. Check to mark as Urgent.</small>
+                </div>
+                <div class="form-group">
+                    <label for="editItemNotes" data-i18n="notes">Notes</label>
+                    <textarea id="editItemNotes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeEditItemModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" data-i18n="saveChanges">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Receiving Modal -->
+    <div id="receivingModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 data-i18n="receiving">Receive Item</h2>
+                <button class="close-btn" onclick="closeReceivingModal()">&times;</button>
+            </div>
+            <form id="receivingForm" onsubmit="handleReceiving(event)">
+                <input type="hidden" id="receivingItemId">
+                <div class="form-group">
+                    <label data-i18n="requestedQty">Requested Quantity</label>
+                    <div class="info-display" id="receivingRequestedQty"></div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="previouslyReceived">Previously Received</label>
+                    <div class="info-display" id="receivingPreviousQty">0</div>
+                </div>
+                <div class="form-group">
+                    <label for="receivingActualQty" data-i18n="receivedQuantityThisTime">Received Quantity This Time *</label>
+                    <input type="number" id="receivingActualQty" step="0.01" min="0" required>
+                    <small class="form-hint" data-i18n="enterQuantityReceived">Enter quantity received in this delivery</small>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="qualityCheck">Quality Check *</label>
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="qualityCheck" value="ok" checked onchange="handleQualityCheckChange()">
+                            <span data-i18n="freshOk">✔ Fresh / OK</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="qualityCheck" value="issue" onchange="handleQualityCheckChange()">
+                            <span data-i18n="issue">⚠ Issue</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group" id="issueTypeGroup" style="display: none;">
+                    <label for="issueType" data-i18n="issueType">Issue Type *</label>
+                    <select id="issueType" required>
+                        <option value="" data-i18n="selectIssueType">Select issue type...</option>
+                        <option value="wrong_weight" data-i18n="wrongWeight">Wrong weight</option>
+                        <option value="not_fresh" data-i18n="notFresh">Not fresh</option>
+                        <option value="wrong_item" data-i18n="wrongItem">Wrong item</option>
+                        <option value="overpriced" data-i18n="overpriced">Overpriced</option>
+                        <option value="other" data-i18n="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group" id="issueReasonGroup" style="display: none;">
+                    <label for="issueReason" data-i18n="issueReason">Issue Details</label>
+                    <textarea id="issueReason" rows="3" data-i18n-placeholder="additionalDetails" placeholder="Additional details about the issue..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeReceivingModal()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" data-i18n="confirmReceiving">Confirm Receiving</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Modal -->
+    <div id="bulkActionsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Bulk Actions</h2>
+                <button class="close-btn" onclick="closeBulkActionsModal()">&times;</button>
+            </div>
+            <div class="bulk-actions-content">
+                <div class="bulk-selected-info">
+                    <strong id="bulkSelectedCount">0</strong> item(s) selected
+                </div>
+                <div class="bulk-actions-grid">
+                    <button class="bulk-action-btn" onclick="bulkMove()">
+                        <span class="bulk-action-icon">→</span>
+                        <span class="bulk-action-label">Move to Next Stage</span>
+                    </button>
+                    <button class="bulk-action-btn" onclick="bulkSetUrgency()">
+                        <span class="bulk-action-icon">🔥</span>
+                        <span class="bulk-action-label">Set Urgency</span>
+                    </button>
+                    <button class="bulk-action-btn" onclick="bulkDelete()">
+                        <span class="bulk-action-icon">🗑️</span>
+                        <span class="bulk-action-label">Delete Selected</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Urgency Modal -->
+    <div id="bulkUrgencyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Set Urgency for Selected Items</h2>
+                <button class="close-btn" onclick="closeBulkUrgencyModal()">&times;</button>
+            </div>
+            <form onsubmit="handleBulkUrgency(event)">
+                <div class="form-group">
+                    <label for="bulkUrgency">Urgency *</label>
+                    <select id="bulkUrgency" required>
+                        <option value="normal">Normal</option>
+                        <option value="urgent">Urgent 🔥</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeBulkUrgencyModal()">Cancel</button>
+                    <button type="submit">Set Urgency</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Item Templates Modal -->
+    <div id="templatesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Item Templates</h2>
+                <button class="close-btn" onclick="closeTemplatesModal()">&times;</button>
+            </div>
+            <div class="templates-content">
+                <div class="templates-list" id="templatesList"></div>
+                <div class="templates-actions">
+                    <button class="action-header-btn" onclick="showAddTemplateModal()">+ New Template</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Template Modal -->
+    <div id="addTemplateModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create Item Template</h2>
+                <button class="close-btn" onclick="closeAddTemplateModal()">&times;</button>
+            </div>
+            <form onsubmit="handleAddTemplate(event)">
+                <div class="form-group">
+                    <label for="templateName">Template Name *</label>
+                    <input type="text" id="templateName" required placeholder="e.g., Daily Vegetables">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="templateQuantity">Default Quantity *</label>
+                        <input type="number" id="templateQuantity" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="templateUnit">Unit *</label>
+                        <select id="templateUnit" required>
+                            <option value="kg" data-i18n="unitKg">kg</option>
+                            <option value="bottle" data-i18n="unitBottle">bottle</option>
+                            <option value="piece" data-i18n="unitPiece">piece</option>
+                            <option value="pack" data-i18n="unitPack">pack</option>
+                            <option value="box" data-i18n="unitBox">box</option>
+                            <option value="liter" data-i18n="unitLiter">liter</option>
+                            <option value="bag" data-i18n="unitBag">Bag</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="templateSupplier">Default Supplier *</label>
+                    <select id="templateSupplier" required>
+                        <option value="Makro" data-i18n="supplierMakro">Makro</option>
+                        <option value="Fresh Market" data-i18n="supplierFreshMarket">Market</option>
+                        <option value="Bakery" data-i18n="supplierBakery">Sunisa</option>
+                        <option value="Other" data-i18n="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeAddTemplateModal()">Cancel</button>
+                    <button type="submit">Create Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Statistics Modal -->
+    <div id="statsModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 data-i18n="procurementStatistics">Procurement Statistics</h2>
+                <button class="close-btn" onclick="closeStatsModal()">&times;</button>
+            </div>
+            <div class="stats-dashboard" id="statsDashboard"></div>
+        </div>
+    </div>
+
+    <!-- Weekly Review Modal -->
+    <div id="weeklyReviewModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 data-i18n="weeklyReview">Weekly Review</h2>
+                <button class="close-btn" onclick="closeWeeklyReviewModal()">&times;</button>
+            </div>
+            <div class="weekly-review-content" id="weeklyReviewContent"></div>
+        </div>
+    </div>
+
+    <!-- Read-Only Item Details Modal (Manager Dashboard) -->
+    <div id="itemDetailsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Item Details</h2>
+                <button class="close-btn" onclick="closeItemDetailsModal()">&times;</button>
+            </div>
+            <div class="item-details-content" id="itemDetailsContent"></div>
+        </div>
+    </div>
+
+    <!-- Receiving Checklist Modal -->
+    <div id="receivingChecklistModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 data-i18n="receivingChecklist">Receiving Checklist</h2>
+                <div class="checklist-actions">
+                    <button class="action-header-btn" onclick="printChecklist()">🖨️ Print</button>
+                    <button class="close-btn" onclick="closeReceivingChecklist()">&times;</button>
+                </div>
+            </div>
+            <div class="checklist-content" id="receivingChecklistContent"></div>
+        </div>
+    </div>
+
+    <!-- Item History Modal -->
+    <div id="itemHistoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Item History</h2>
+                <button class="close-btn" onclick="closeItemHistoryModal()">&times;</button>
+            </div>
+            <div class="history-content" id="itemHistoryContent"></div>
+        </div>
+    </div>
+
+    <!-- Quick Actions Modal -->
+    <div id="quickActionsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Quick Actions</h2>
+                <button class="close-btn" onclick="closeQuickActions()">&times;</button>
+            </div>
+            <div class="quick-actions-grid">
+                <button class="quick-action-card" onclick="quickActionMoveAllToNext()">
+                    <span class="quick-action-icon">→</span>
+                    <span class="quick-action-label" data-i18n="moveAllToNextStage">Move All to Next Stage</span>
+                    <span class="quick-action-desc">Advance all items in current stage</span>
+                </button>
+                <button class="quick-action-card" onclick="quickActionMarkAllReceived()">
+                    <span class="quick-action-icon">✓</span>
+                    <span class="quick-action-label" data-i18n="markAllReceivedOk">Mark All Received OK</span>
+                    <span class="quick-action-desc">Mark all received items as verified</span>
+                </button>
+                <button class="quick-action-card" onclick="quickActionClearCompleted()">
+                    <span class="quick-action-icon">🗑️</span>
+                    <span class="quick-action-label" data-i18n="clearCompleted">Clear Completed</span>
+                    <span class="quick-action-desc">Remove verified items older than 7 days</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="keyboardShortcutsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Keyboard Shortcuts</h2>
+                <button class="close-btn" onclick="closeKeyboardShortcuts()">&times;</button>
+            </div>
+            <div class="shortcuts-list">
+                <div class="shortcut-item">
+                    <div class="shortcut-keys">
+                        <kbd>Ctrl</kbd> + <kbd>K</kbd>
+                    </div>
+                    <div class="shortcut-desc">Focus search</div>
+                </div>
+                <div class="shortcut-item">
+                    <div class="shortcut-keys">
+                        <kbd>Ctrl</kbd> + <kbd>N</kbd>
+                    </div>
+                    <div class="shortcut-desc">Add new item</div>
+                </div>
+                <div class="shortcut-item">
+                    <div class="shortcut-keys">
+                        <kbd>Ctrl</kbd> + <kbd>B</kbd>
+                    </div>
+                    <div class="shortcut-desc">Toggle bulk select</div>
+                </div>
+                <div class="shortcut-item">
+                    <div class="shortcut-keys">
+                        <kbd>Esc</kbd>
+                    </div>
+                    <div class="shortcut-desc">Close modals / Cancel bulk select</div>
+                </div>
+                <div class="shortcut-item">
+                    <div class="shortcut-keys">
+                        <kbd>1</kbd> - <kbd>5</kbd>
+                    </div>
+                    <div class="shortcut-desc">Switch to column (when focused)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content modal-small login-modal-content">
+            <div class="modal-header login-modal-header">
+                <h2 data-i18n="login">เข้าสู่ระบบ</h2>
+            </div>
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="login-instruction">
+                    <p data-i18n="loginInstruction">กรุณากรอกชื่อเล่นเพื่อแก้ไขข้อมูลห้อง</p>
+                </div>
+                <div class="form-group login-form-group">
+                    <input type="text" id="nicknameInput" placeholder="กรอกชื่อเล่น" required autofocus class="login-input">
+                </div>
+                <div class="form-actions login-form-actions">
+                    <button type="submit" class="btn-primary login-btn" data-i18n="login">เข้าสู่ระบบ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Import Modal -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Import Data</h2>
+                <button class="close-btn" onclick="closeImportModal()">&times;</button>
+            </div>
+            <form id="importForm" onsubmit="handleImport(event)">
+                <div class="form-group">
+                    <label>Paste JSON data:</label>
+                    <textarea id="importData" rows="10" placeholder='Paste exported JSON data here...' required></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="importReplace">
+                        Replace all existing data (otherwise merge)
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeImportModal()">Cancel</button>
+                    <button type="submit">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Issue Bottom Sheet (Mobile Only) -->
+    <div id="quickIssueSheet" class="quick-issue-sheet">
+        <div class="quick-issue-sheet-content">
+            <div class="quick-issue-sheet-header">
+                <h3 data-i18n="issue">Issue</h3>
+                <button class="close-btn" onclick="closeQuickIssueSheet()">&times;</button>
+            </div>
+            <form id="quickIssueForm" onsubmit="handleQuickIssue(event)">
+                <input type="hidden" id="quickIssueItemId">
+                <div class="form-group">
+                    <label for="quickIssueType" data-i18n="issueType">Issue Type *</label>
+                    <select id="quickIssueType" required>
+                        <option value="" data-i18n="selectIssueType">Select issue type...</option>
+                        <option value="wrong_weight" data-i18n="wrongWeight">Wrong weight</option>
+                        <option value="not_fresh" data-i18n="notFresh">Not fresh</option>
+                        <option value="wrong_item" data-i18n="wrongItem">Wrong item</option>
+                        <option value="overpriced" data-i18n="overpriced">Overpriced</option>
+                        <option value="other" data-i18n="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="quickIssueReason" data-i18n="issueReason">Details (Optional)</label>
+                    <textarea id="quickIssueReason" rows="3" data-i18n-placeholder="additionalDetails" placeholder="Additional details about the issue..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" onclick="closeQuickIssueSheet()" data-i18n="cancel">Cancel</button>
+                    <button type="submit" data-i18n="confirm">Confirm</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="purchase.js"></script>
+</body>
+</html>
