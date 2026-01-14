@@ -1,11 +1,23 @@
 {
   "rewrites": [
     {
+      "source": "/roomstatus/assets/:path*",
+      "destination": "/assets/:path*"
+    },
+    {
+      "source": "/roomstatus/favicon.png",
+      "destination": "/favicon.png"
+    },
+    {
       "source": "/roomstatus",
       "destination": "/index.html"
     },
     {
       "source": "/roomstatus/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/roomstatus/:path*",
       "destination": "/index.html"
     }
   ]
