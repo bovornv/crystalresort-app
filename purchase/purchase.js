@@ -318,7 +318,21 @@ async function updatePresenceIndicator() {
 
 // Setup real-time subscriptions with improved error handling
 function setupRealtimeSubscriptions() {
-    if (!checkSupabaseConfig()) return;
+    console.log('🔄 setupRealtimeSubscriptions() called');
+    
+    if (!checkSupabaseConfig()) {
+        console.warn('⚠️ Supabase not configured, real-time subscriptions disabled');
+        console.log('Check:', {
+            hasClient: !!supabaseClientInstance,
+            hasUrl: !!SUPABASE_URL,
+            urlValid: SUPABASE_URL?.startsWith('https://'),
+            hasKey: !!SUPABASE_ANON_KEY,
+            keyValid: SUPABASE_ANON_KEY?.startsWith('eyJ')
+        });
+        return;
+    }
+    
+    console.log('✅ Supabase configured, setting up real-time subscriptions...');
     
     // Clean up existing subscriptions
     realtimeSubscriptions.forEach(sub => {
@@ -368,13 +382,21 @@ function setupRealtimeSubscriptions() {
                 }
             }
         )
-        .subscribe((status) => {
+        .subscribe((status, err) => {
+            console.log('📡 purchase_items subscription status:', status);
             if (status === 'SUBSCRIBED') {
-                console.log('✅ Subscribed to purchase_items realtime changes');
+                console.log('✅ Successfully subscribed to purchase_items realtime changes');
             } else if (status === 'CHANNEL_ERROR') {
-                console.error('❌ Error subscribing to purchase_items changes:', status);
+                console.error('❌ Error subscribing to purchase_items changes');
+                console.error('Error details:', err);
+                console.error('Check: 1) Real-time enabled in Supabase? 2) RLS policies allow access?');
+            } else if (status === 'TIMED_OUT') {
+                console.error('⏱️ Subscription timed out - check Supabase real-time is enabled');
+                console.error('Run in Supabase SQL Editor: ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;');
+            } else if (status === 'CLOSED') {
+                console.warn('⚠️ Subscription closed');
             } else {
-                console.log('🔄 Subscription status:', status);
+                console.log('🔄 Subscription status:', status, err ? 'Error: ' + JSON.stringify(err) : '');
             }
         });
     
@@ -1671,6 +1693,7 @@ async function loadData() {
         }
         
         // Setup real-time subscriptions
+        console.log('📡 Setting up real-time subscriptions after data load...');
         setupRealtimeSubscriptions();
     } else {
         // Use localStorage fallback (synchronous)
