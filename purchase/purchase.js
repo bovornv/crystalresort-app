@@ -143,6 +143,7 @@ async function saveItemToSupabase(item) {
             console.log('No authenticated user, saving without user ID');
         }
         
+        // Build itemData with only essential columns first
         const itemData = {
             id: item.id,
             name: item.name,
@@ -150,17 +151,31 @@ async function saveItemToSupabase(item) {
             unit: item.unit,
             supplier: item.supplier,
             status: item.status,
-            requested_qty: item.requested_qty || item.quantity || 0,
-            received_qty: item.received_qty || 0,
-            urgency: item.urgency || 'normal',
-            issue_type: item.issue_type || null,
-            issue_reason: item.issueReason || null, // Map camelCase to snake_case for database
-            updated_by: user?.id || null,
             updated_at: new Date().toISOString()
         };
         
+        // Add optional columns only if they have values (to avoid schema errors)
+        if (item.requested_qty !== undefined || item.quantity !== undefined) {
+            itemData.requested_qty = item.requested_qty || item.quantity || 0;
+        }
+        if (item.received_qty !== undefined) {
+            itemData.received_qty = item.received_qty || 0;
+        }
+        if (item.urgency !== undefined) {
+            itemData.urgency = item.urgency || 'normal';
+        }
+        if (item.issue_type !== undefined && item.issue_type !== null) {
+            itemData.issue_type = item.issue_type;
+        }
+        if (item.issueReason !== undefined && item.issueReason !== null) {
+            itemData.issue_reason = item.issueReason; // Map camelCase to snake_case
+        }
+        if (user?.id) {
+            itemData.updated_by = user.id;
+        }
+        
         // Only set created_by if this is a new item
-        if (!item.created_by && user) {
+        if (!item.created_by && user?.id) {
             itemData.created_by = user.id;
         }
         
@@ -171,9 +186,32 @@ async function saveItemToSupabase(item) {
             hasUser: !!user
         });
         
-        const { data, error } = await supabaseClientInstance
+        // Try upsert with all columns first
+        let { data, error } = await supabaseClientInstance
             .from('purchase_items')
             .upsert(itemData, { onConflict: 'id' });
+        
+        // If error is about missing columns, try again with minimal columns
+        if (error && error.code === 'PGRST204') {
+            console.warn('⚠️ Column missing error, retrying with minimal columns:', error.message);
+            const minimalData = {
+                id: item.id,
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                supplier: item.supplier,
+                status: item.status
+            };
+            const retryResult = await supabaseClientInstance
+                .from('purchase_items')
+                .upsert(minimalData, { onConflict: 'id' });
+            if (retryResult.error) {
+                console.error('❌ Supabase save error (minimal retry):', retryResult.error);
+                throw retryResult.error;
+            }
+            data = retryResult.data;
+            error = null;
+        }
         
         if (error) {
             console.error('❌ Supabase save error:', error);
