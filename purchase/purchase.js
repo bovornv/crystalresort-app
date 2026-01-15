@@ -65,6 +65,11 @@ let realtimeSubscriptions = [];
 let realtimeSubscribed = false; // Track if subscriptions are active
 let useSupabase = false;
 
+// Generate unique client ID to prevent feedback loops
+// This ID is used to tag local updates and ignore our own real-time events
+const CLIENT_ID = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+let lastLocalUpdateIds = new Set(); // Track recently saved item IDs to ignore our own updates
+
 // User state
 let currentUser = null;
 let userRole = 'staff'; // 'admin', 'manager', or 'staff'
@@ -233,6 +238,13 @@ async function saveItemToSupabase(item, source = 'user') {
             console.error('❌ Supabase save error:', error);
             throw error;
         }
+        
+        // Track this as a local update to prevent processing our own real-time events
+        lastLocalUpdateIds.add(item.id);
+        // Clear after 2 seconds to allow legitimate remote updates
+        setTimeout(() => {
+            lastLocalUpdateIds.delete(item.id);
+        }, 2000);
         
         // When status changes to 'received', insert snapshot into purchase_history
         if (item.status === 'received') {
@@ -568,18 +580,49 @@ function setupRealtimeSubscriptions() {
                 filter: undefined
             },
             async (payload) => {
-                // Real-time update - update UI only, do NOT trigger saves
-                if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                // Real-time update - update UI ONLY, NEVER write back to Supabase
+                const itemId = payload.new?.id || payload.old?.id;
+                
+                // Prevent feedback loops: ignore our own updates
+                if (lastLocalUpdateIds.has(itemId)) {
+                    return; // This is our own update, ignore it
+                }
+                
+                // Log once when applying remote change
+                if (!window.realtimeApplyLogged) {
+                    console.log('✅ Applying remote change to UI');
+                    window.realtimeApplyLogged = true;
+                }
+                
+                if (payload.eventType === 'INSERT') {
+                    // Real-time INSERT → add item to state
+                    const newItem = migrateItemToV2(payload.new);
+                    newItem._fromRealtime = true; // Mark to prevent echo save
+                    
+                    // Only add if it has a valid name
+                    const hasValidName = newItem.name && 
+                                       newItem.name.trim() !== '' && 
+                                       newItem.name !== 'Unknown Item';
+                    if (hasValidName) {
+                        items.push(newItem);
+                        // Log operation once
+                        if (!window.realtimeInsertLogged) {
+                            console.log(`✅ Remote INSERT: ${newItem.id} - ${newItem.name}`);
+                            window.realtimeInsertLogged = true;
+                        }
+                        renderBoard();
+                        updatePresenceIndicator();
+                    }
+                } else if (payload.eventType === 'UPDATE') {
+                    // Real-time UPDATE → update item in state
                     const updatedItem = migrateItemToV2(payload.new);
-                    // Mark as from real-time to prevent echo saves
-                    updatedItem._fromRealtime = true;
+                    updatedItem._fromRealtime = true; // Mark to prevent echo save
                     
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
-                        // CRITICAL: Treat as partial update - never overwrite valid name with invalid one
                         const existingItem = items[index];
                         
-                        // Validate name from update (reject empty strings, fallbacks, etc.)
+                        // Validate name from update
                         const updateHasValidName = updatedItem.name && 
                                                   updatedItem.name.trim() !== '' && 
                                                   updatedItem.name !== 'Unknown Item' &&
@@ -591,44 +634,58 @@ function setupRealtimeSubscriptions() {
                                                     existingItem.name !== 'Unknown Item' &&
                                                     !existingItem.name.startsWith('Unknown');
                         
-                        // CRITICAL: Only use update name if it's valid, otherwise preserve existing
-                        let finalName = existingItem.name; // Default to existing
+                        // Use update name if valid, otherwise preserve existing
+                        let finalName = existingItem.name;
                         if (updateHasValidName) {
-                            finalName = updatedItem.name; // Use update if valid
+                            finalName = updatedItem.name;
                         } else if (!existingHasValidName && updateHasValidName) {
-                            finalName = updatedItem.name; // Use update if existing is invalid but update is valid
+                            finalName = updatedItem.name;
                         }
-                        // Silent: if both invalid, keep existing (no log)
                         
+                        // CRITICAL: Mutate state using same logic as local updates
                         // Merge: preserve local-only fields, update with database fields
-                        // CRITICAL: Never overwrite name unless update has valid name
                         items[index] = {
                             ...existingItem,
                             ...updatedItem,
-                            name: finalName, // Use preserved/valid name
-                            _fromRealtime: true, // Mark to prevent echo save
-                            // Preserve local-only fields that might not be in DB
+                            name: finalName,
+                            _fromRealtime: true,
+                            // Preserve local-only fields
                             history: existingItem.history || updatedItem.history,
-                            statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps
+                            statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps || {}
                         };
-                    } else {
-                        // New item - only add if it has a valid name
-                        const hasValidName = updatedItem.name && 
-                                           updatedItem.name.trim() !== '' && 
-                                           updatedItem.name !== 'Unknown Item';
-                        if (hasValidName) {
-                            items.push(updatedItem);
+                        
+                        // Auto-detect issue status (same as local updates)
+                        detectAndUpdateIssueStatus(items[index]);
+                        
+                        // Log operation once
+                        if (!window.realtimeUpdateLogged) {
+                            console.log(`✅ Remote UPDATE: ${updatedItem.id} - status: ${updatedItem.status}`);
+                            window.realtimeUpdateLogged = true;
+                        }
+                        
+                        // CRITICAL: Re-render UI to reflect state changes
+                        renderBoard();
+                        updatePresenceIndicator();
+                        
+                        // Refresh views if active (same as local updates)
+                        if (currentView === 'dashboard') {
+                            renderDashboard();
+                        } else if (currentView === 'mobile') {
+                            renderMobileView();
                         }
                     }
-                    renderBoard();
-                    updatePresenceIndicator();
-                    // Log once when receiving update from another client
-                    if (!window.realtimeUpdateLogged) {
-                        console.log('✅ Real-time update received from another client');
-                        window.realtimeUpdateLogged = true;
-                    }
                 } else if (payload.eventType === 'DELETE') {
-                    items = items.filter(i => i.id !== payload.old.id);
+                    // Real-time DELETE → remove item from state
+                    const deletedId = payload.old.id;
+                    items = items.filter(i => i.id !== deletedId);
+                    
+                    // Log operation once
+                    if (!window.realtimeDeleteLogged) {
+                        console.log(`✅ Remote DELETE: ${deletedId}`);
+                        window.realtimeDeleteLogged = true;
+                    }
+                    
+                    // CRITICAL: Re-render UI to reflect state changes
                     renderBoard();
                     updatePresenceIndicator();
                 }
