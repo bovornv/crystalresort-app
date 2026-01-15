@@ -36,6 +36,16 @@
       "status": 200
     },
     {
+      "src": "/favicon.svg",
+      "dest": "/dashboard/favicon.svg",
+      "status": 200
+    },
+    {
+      "src": "/shared/(.*)",
+      "dest": "/shared/$1",
+      "status": 200
+    },
+    {
       "src": "/",
       "dest": "/dashboard/index.html",
       "status": 200

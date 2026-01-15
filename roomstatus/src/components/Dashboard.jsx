@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import RoomCard from "./RoomCard";
 import CommonAreaCard from "./CommonAreaCard";
+import Footer from "../shared/Footer";
+import AnnouncementBox from "../shared/AnnouncementBox";
+import "../shared/theme.css";
+import "../shared/shared.css";
 import * as pdfjsLib from "pdfjs-dist";
 import { db } from "../services/firebase";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
@@ -1712,7 +1716,9 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F6F8FA] font-['Noto_Sans_Thai'] p-4">
+    <div className="min-h-screen bg-[#F6F8FA] font-['Noto_Sans_Thai'] flex flex-col">
+      <AnnouncementBox />
+      <div className="flex-1 p-4">
         {/* Login Modal */}
         {showLoginModal && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -1875,7 +1881,7 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Header */}
+      {/* Page Title & User Menu */}
       <div className="text-center mb-6 relative">
         {/* Login/User Pill Button - Top Right */}
         <div className="absolute top-0 right-0 user-menu-container">
@@ -2413,6 +2419,8 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+      </div>
+      <Footer />
     </div>
   );
 };

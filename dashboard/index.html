@@ -1,70 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crystal Resort – Internal Tools</title>
+    <title>ระบบภายใน Crystal Resort & Café</title>
+    <link rel="icon" type="image/svg+xml" href="/dashboard/favicon.svg">
+    <link rel="apple-touch-icon" href="/dashboard/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/shared/theme.css">
+    <link rel="stylesheet" href="/shared/shared.css">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+        
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Noto Sans Thai', sans-serif;
+            background-color: #F6F8FA;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #1F2937;
+        }
+        
+        .main-content {
+            flex: 1;
             display: flex;
             align-items: center;
             justify-content: center;
             padding: 20px;
         }
+        
         .container {
             background: white;
-            border-radius: 16px;
-            padding: 48px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
             max-width: 600px;
             width: 100%;
-            text-align: center;
         }
-        h1 {
-            color: #333;
-            margin-bottom: 40px;
-            font-size: 32px;
-            font-weight: 600;
-        }
+        
         .tools {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 1rem;
         }
+        
         a {
             display: block;
-            padding: 20px 32px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1.5rem;
+            background-color: #2C3E50;
             color: white;
             text-decoration: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 500;
-            transition: transform 0.2s, box-shadow 0.2s;
+            border-radius: 0.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            text-align: center;
+            transition: background-color 0.15s ease;
         }
+        
         a:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+            background-color: #34495E;
         }
+        
         a:active {
-            transform: translateY(0);
+            transform: scale(0.98);
+        }
+        
+        @media (max-width: 640px) {
+            .container {
+                padding: 1.5rem;
+            }
+            
+            a {
+                padding: 1.25rem;
+                font-size: 1.125rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Crystal Resort – Internal Tools</h1>
+    <script src="/shared/shared-header.js"></script>
+    <div class="main-content">
+        <div class="container">
         <div class="tools">
-            <a href="/roomstatus/">Room Status</a>
-            <a href="/purchase/">Purchase Board</a>
+            <a href="/roomstatus/">สถานะห้องพัก</a>
+            <a href="/purchase/">บอร์ดจัดซื้อ</a>
+        </div>
         </div>
     </div>
 </body>
