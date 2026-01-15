@@ -1125,7 +1125,7 @@ const translations = {
         'managerView': 'มุมมองผู้จัดการ',
         
         // Board columns
-        'needToBuy': 'ขั้นที่0: ต้องซื้อ',
+        'needToBuy': 'ขั้นที่0: เตรียมสั่ง',
         'ordered': 'ขั้นที่1: พร้อมสั่งซื้อ',
         'bought': 'ขั้นที่2: ซื้อแล้ว / กำลังขนส่ง',
         'received': 'รับแล้ว',
