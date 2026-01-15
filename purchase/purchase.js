@@ -12,7 +12,13 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 let supabaseClientInstance = null;
 
 // Function to initialize Supabase client (called after script loads)
+// CRITICAL: Create client ONCE globally, never recreate
 function initializeSupabaseClient() {
+    // If client already exists, don't recreate
+    if (supabaseClientInstance) {
+        return;
+    }
+    
     // Check for both 'supabase' (CDN global) and 'supabaseClient' (module)
     const supabaseLib = typeof supabase !== 'undefined' ? supabase : (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
     
@@ -33,6 +39,7 @@ function initializeSupabaseClient() {
         if (SUPABASE_URL && SUPABASE_ANON_KEY && 
             SUPABASE_URL.startsWith('https://') && 
             SUPABASE_ANON_KEY.startsWith('eyJ')) {
+            // Create client ONCE - never recreate
             supabaseClientInstance = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             window.supabaseInitRetries = 0; // Reset retry counter on success
         }
@@ -55,6 +62,7 @@ if (document.readyState === 'loading') {
 let isOnline = navigator.onLine;
 let syncInProgress = false;
 let realtimeSubscriptions = [];
+let realtimeSubscribed = false; // Track if subscriptions are active
 let useSupabase = false;
 
 // User state
@@ -521,20 +529,28 @@ async function updatePresenceIndicator() {
 }
 
 // Setup real-time subscriptions with improved error handling
+// CRITICAL: Only create subscriptions ONCE, after data load
+// CRITICAL: Never recreate subscriptions - check if already subscribed
 function setupRealtimeSubscriptions() {
     if (!checkSupabaseConfig()) {
         return;
     }
     
-    // Clean up existing subscriptions
+    // Prevent duplicate subscriptions - if already subscribed, don't recreate
+    if (realtimeSubscribed && realtimeSubscriptions.length > 0) {
+        return;
+    }
+    
+    // Clean up any existing subscriptions first
     realtimeSubscriptions.forEach(sub => {
         try {
-        supabaseClientInstance.removeChannel(sub);
+            supabaseClientInstance.removeChannel(sub);
         } catch (e) {
-            console.warn('Error removing channel:', e);
+            // Silent cleanup
         }
     });
     realtimeSubscriptions = [];
+    realtimeSubscribed = false;
     
     // Subscribe to purchase_items changes (realtime updates for active board)
     // This enables instant updates across all devices when items are added/updated/deleted
@@ -606,6 +622,11 @@ function setupRealtimeSubscriptions() {
                     }
                     renderBoard();
                     updatePresenceIndicator();
+                    // Log once when receiving update from another client
+                    if (!window.realtimeUpdateLogged) {
+                        console.log('✅ Real-time update received from another client');
+                        window.realtimeUpdateLogged = true;
+                    }
                 } else if (payload.eventType === 'DELETE') {
                     items = items.filter(i => i.id !== payload.old.id);
                     renderBoard();
@@ -614,20 +635,16 @@ function setupRealtimeSubscriptions() {
             }
         )
         .subscribe((status, err) => {
-            console.log('📡 purchase_items subscription status:', status);
             if (status === 'SUBSCRIBED') {
-                console.log('✅ Successfully subscribed to purchase_items realtime changes');
-            } else if (status === 'CHANNEL_ERROR') {
-                console.error('❌ Error subscribing to purchase_items changes');
-                console.error('Error details:', err);
-                console.error('Check: 1) Real-time enabled in Supabase? 2) RLS policies allow access?');
-            } else if (status === 'TIMED_OUT') {
-                console.error('⏱️ Subscription timed out - check Supabase real-time is enabled');
-                console.error('Run in Supabase SQL Editor: ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;');
-            } else if (status === 'CLOSED') {
-                console.warn('⚠️ Subscription closed');
-            } else {
-                console.log('🔄 Subscription status:', status, err ? 'Error: ' + JSON.stringify(err) : '');
+                realtimeSubscribed = true;
+                // Log once when subscribed
+                if (!window.realtimeSubscribedLogged) {
+                    console.log('✅ Real-time subscribed: purchase_items');
+                    window.realtimeSubscribedLogged = true;
+                }
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                realtimeSubscribed = false;
+                console.error('❌ Real-time subscription error:', status, err);
             }
         });
     
@@ -679,11 +696,11 @@ function setupRealtimeSubscriptions() {
                 }
             }
         )
-        .subscribe((status) => {
+        .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
-                console.log('Subscribed to purchase_history realtime changes');
-            } else if (status === 'CHANNEL_ERROR') {
-                console.error('Error subscribing to purchase_history changes');
+                // Silent success - real-time is working
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                console.error('❌ purchase_history subscription error:', status, err);
             }
         });
     
@@ -707,12 +724,36 @@ function setupRealtimeSubscriptions() {
     realtimeSubscriptions.push(presenceChannel);
 }
 
-// Network status monitoring
+// Network status monitoring and lifecycle handling
+// Reconnect real-time on network reconnect
 window.addEventListener('online', () => {
     isOnline = true;
-    if (checkSupabaseConfig()) {
-        setupRealtimeSubscriptions();
+    if (checkSupabaseConfig() && supabaseClientInstance) {
+        // Reconnect real-time subscriptions if not already subscribed
+        if (!realtimeSubscribed) {
+            setupRealtimeSubscriptions();
+        }
         loadData().catch(err => console.error('Error loading data on online:', err));
+    }
+});
+
+// Handle page visibility changes (mobile backgrounding/foregrounding)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && checkSupabaseConfig() && supabaseClientInstance) {
+        // Page became visible - reconnect if needed
+        if (!realtimeSubscribed) {
+            setupRealtimeSubscriptions();
+        }
+    }
+});
+
+// Handle page focus (desktop tab switching)
+window.addEventListener('focus', () => {
+    if (checkSupabaseConfig() && supabaseClientInstance) {
+        // Page focused - reconnect if needed
+        if (!realtimeSubscribed) {
+            setupRealtimeSubscriptions();
+        }
     }
 });
 
