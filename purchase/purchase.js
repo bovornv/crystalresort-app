@@ -303,8 +303,8 @@ async function insertPurchaseHistory(item, userId) {
             }
         }
         
+        // DO NOT include id - let Supabase auto-generate UUID
         const historyData = {
-            id: `history_${item.id}_${Date.now()}`,
             item_id: item.id,
             item_name: item.name,
             supplier: item.supplier,
