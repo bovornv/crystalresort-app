@@ -143,14 +143,40 @@ async function saveItemToSupabase(item) {
             console.log('No authenticated user, saving without user ID');
         }
         
-        // Build itemData with only essential columns first
+        // CRITICAL: Ensure item.name exists - fetch existing item if name is missing
+        let itemName = item.name;
+        if (!itemName || itemName.trim() === '') {
+            console.warn('⚠️ Item name missing, fetching existing item from database:', item.id);
+            try {
+                const { data: existingItem, error: fetchError } = await supabaseClientInstance
+                    .from('purchase_items')
+                    .select('item_name')
+                    .eq('id', item.id)
+                    .single();
+                
+                if (!fetchError && existingItem?.item_name) {
+                    itemName = existingItem.item_name;
+                    item.name = itemName; // Update local item too
+                    console.log('✅ Restored item name from database:', itemName);
+                } else {
+                    console.error('❌ Could not fetch existing item name:', fetchError);
+                    // If we can't get the name, skip this save to avoid blanking it
+                    return false;
+                }
+            } catch (fetchErr) {
+                console.error('❌ Error fetching existing item:', fetchErr);
+                return false;
+            }
+        }
+        
+        // Build itemData - always include essential fields
         // Map JavaScript property names to database column names
         const itemData = {
             id: item.id,
-            item_name: item.name, // Map 'name' to 'item_name' for database
-            quantity: item.quantity,
-            unit: item.unit,
-            supplier: item.supplier,
+            item_name: itemName, // Always include name to prevent blanking
+            quantity: item.quantity || 0,
+            unit: item.unit || '',
+            supplier: item.supplier || '',
             status: item.status,
             updated_at: new Date().toISOString()
         };
@@ -182,7 +208,7 @@ async function saveItemToSupabase(item) {
         
         console.log('💾 Saving item to Supabase:', {
             id: item.id,
-            name: item.name,
+            name: itemName,
             status: item.status,
             hasUser: !!user
         });
@@ -192,15 +218,15 @@ async function saveItemToSupabase(item) {
             .from('purchase_items')
             .upsert(itemData, { onConflict: 'id' });
         
-        // If error is about missing columns, try again with minimal columns
+        // If error is about missing columns, try again with minimal columns (but always include name)
         if (error && error.code === 'PGRST204') {
             console.warn('⚠️ Column missing error, retrying with minimal columns:', error.message);
             const minimalData = {
                 id: item.id,
-                item_name: item.name, // Map 'name' to 'item_name' for database
-                quantity: item.quantity,
-                unit: item.unit,
-                supplier: item.supplier,
+                item_name: itemName, // Always include name
+                quantity: item.quantity || 0,
+                unit: item.unit || '',
+                supplier: item.supplier || '',
                 status: item.status
             };
             const retryResult = await supabaseClientInstance
@@ -531,8 +557,22 @@ function setupRealtimeSubscriptions() {
                     const updatedItem = migrateItemToV2(payload.new);
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
-                        console.log('📝 Updating existing item:', updatedItem.name);
-                        items[index] = updatedItem;
+                        // CRITICAL: Merge update with existing item to preserve name if missing
+                        const existingItem = items[index];
+                        if (!updatedItem.name && existingItem.name) {
+                            updatedItem.name = existingItem.name;
+                            console.log('⚠️ Restored item name from local cache:', existingItem.name);
+                        }
+                        console.log('📝 Updating existing item:', updatedItem.name || existingItem.name);
+                        // Merge: preserve local-only fields, update with database fields
+                        items[index] = {
+                            ...existingItem,
+                            ...updatedItem,
+                            name: updatedItem.name || existingItem.name, // Always preserve name
+                            // Preserve local-only fields that might not be in DB
+                            history: existingItem.history || updatedItem.history,
+                            statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps
+                        };
                     } else {
                         console.log('➕ Adding new item:', updatedItem.name);
                         items.push(updatedItem);
@@ -1890,9 +1930,17 @@ async function loadData() {
 // Migrate item to v2 data model
 function migrateItemToV2(item) {
     // Map snake_case database columns to camelCase JavaScript properties
-    // Map item_name (database) to name (JavaScript)
-    if (item.item_name !== undefined && item.name === undefined) {
-        item.name = item.item_name;
+    // Map item_name (database) to name (JavaScript) - CRITICAL: Always preserve name
+    if (item.item_name !== undefined) {
+        // Prefer item_name from DB, but don't overwrite existing name if it exists
+        if (!item.name || item.name.trim() === '') {
+            item.name = item.item_name;
+        }
+    }
+    // Ensure name exists - if neither name nor item_name exists, use a fallback
+    if (!item.name || item.name.trim() === '') {
+        item.name = item.item_name || 'Unknown Item';
+        console.warn('⚠️ Item missing name, using fallback:', item.id);
     }
     
     // Map issue_reason (database) to issueReason (JavaScript)
