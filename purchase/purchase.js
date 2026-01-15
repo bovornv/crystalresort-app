@@ -749,9 +749,9 @@ function updateUserUI() {
         // Show/hide admin-only features
         const statsBtn = document.querySelector('button[onclick="showStatsModal()"]');
         const weeklyReviewBtn = document.querySelector('button[onclick="showWeeklyReviewModal()"]');
-        // Make history button visible for all users
+        // Make all buttons visible for all users
         if (statsBtn) statsBtn.style.display = 'inline-flex';
-        if (weeklyReviewBtn) weeklyReviewBtn.style.display = isAdminOrManager() ? 'inline-flex' : 'none';
+        if (weeklyReviewBtn) weeklyReviewBtn.style.display = 'inline-flex';
         
         // Show app content
         const appContainer = document.querySelector('.app-container');
@@ -4102,11 +4102,7 @@ function showWeeklyReviewModal() {
         return;
     }
     
-    // Only admin and manager can view reports
-    if (!isAdminOrManager()) {
-        showNotification('Only administrators and managers can view weekly review', 'error');
-        return;
-    }
+    // All users can view reports
     
     try {
         renderWeeklyReview();
