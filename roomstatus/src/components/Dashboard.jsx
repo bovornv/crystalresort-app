@@ -260,21 +260,93 @@ const Dashboard = () => {
     };
   }, []);
 
-  // Load common areas from Firestore and set up real-time listener
+  // Load common areas from Supabase and set up real-time listener
   useEffect(() => {
-    const commonAreasCollection = collection(db, "commonAreas");
-    
-    const unsubscribe = onSnapshot(commonAreasCollection, (snapshot) => {
-      const areas = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setCommonAreas(areas);
-    }, (error) => {
-      console.error("Error listening to common areas:", error);
-    });
+    // Check if Supabase is configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+    const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+      supabaseUrl !== '' && supabaseAnonKey !== '' &&
+      !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key');
 
-    return () => unsubscribe();
+    if (!isSupabaseConfigured) {
+      console.warn('⚠️ Supabase not configured - common areas will use Firebase fallback');
+      // Fallback to Firebase if Supabase not configured
+      const commonAreasCollection = collection(db, "commonAreas");
+      
+      const unsubscribe = onSnapshot(commonAreasCollection, (snapshot) => {
+        const areas = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setCommonAreas(areas);
+      }, (error) => {
+        console.error("Error listening to common areas:", error);
+      });
+
+      return () => unsubscribe();
+    }
+
+    // Load initial common areas from Supabase
+    const loadCommonAreas = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('common_areas')
+          .select('*')
+          .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+
+        if (data) {
+          const areas = data.map(row => ({
+            id: row.id,
+            area: row.area,
+            time: row.time,
+            status: row.status || 'waiting',
+            maid: row.maid || '',
+            border: row.border || 'black'
+          }));
+          setCommonAreas(areas);
+          console.log("✅ Initial load of common areas from Supabase completed");
+        } else {
+          setCommonAreas([]);
+        }
+      } catch (error) {
+        console.error("Error loading common areas from Supabase:", error);
+        setCommonAreas([]);
+      }
+    };
+
+    loadCommonAreas();
+
+    // Set up real-time subscription for common areas
+    const channel = supabase
+      .channel('common_areas_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'common_areas'
+        },
+        (payload) => {
+          // Reload all common areas to ensure consistency
+          loadCommonAreas().then(() => {
+            console.log("✅ Common areas updated from Supabase");
+          });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("Common areas realtime connected");
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error("❌ Common areas realtime channel error:", status);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Load report counts from Firestore
@@ -1517,44 +1589,80 @@ const Dashboard = () => {
       console.log(`Cleared ${clearedRooms.filter(r => r.status === "vacant").length} rooms to vacant`);
 
       // --- Clear all common area data ---
-      const areaSnapshot = await getDocs(collection(db, "commonAreas"));
-      console.log(`📋 Found ${areaSnapshot.docs.length} common area documents to clear`);
-      
-      if (areaSnapshot.docs.length === 0) {
-        console.log("⚠️ No common area documents found in Firestore");
-      }
-      
-      const areaPromises = areaSnapshot.docs.map(async (docSnap) => {
-        // Use the document ID from Firestore (it's already stored correctly)
-        const docId = docSnap.id;
-        const data = docSnap.data();
+      // Check if Supabase is configured
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+      const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+        supabaseUrl !== '' && supabaseAnonKey !== '' &&
+        !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key');
+
+      if (isSupabaseConfigured) {
+        // Use Supabase
+        try {
+          // Fetch all common areas
+          const { data: areas, error: fetchError } = await supabase
+            .from('common_areas')
+            .select('*');
+
+          if (fetchError) throw fetchError;
+
+          if (areas && areas.length > 0) {
+            console.log(`📋 Found ${areas.length} common area documents to clear`);
+            
+            // Update all areas to waiting state
+            const updatePromises = areas.map(async (areaData) => {
+              const updateData = {
+                id: areaData.id,
+                area: areaData.area,
+                time: areaData.time,
+                status: "waiting", // Change green background to red (waiting = red background)
+                maid: "", // Delete maid's nickname
+                border: "black", // Change border to black
+                updated_at: new Date().toISOString(),
+                updated_by: nickname || "FO"
+              };
+
+              const { error } = await supabase
+                .from('common_areas')
+                .upsert(updateData, { onConflict: 'id' });
+
+              if (error) throw error;
+              console.log(`✅ Cleared area ${areaData.id}`);
+            });
+
+            await Promise.all(updatePromises);
+            console.log(`✅ Successfully cleared ${areas.length} common areas to waiting state`);
+          } else {
+            console.log("⚠️ No common area documents found in Supabase");
+          }
+        } catch (error) {
+          console.error("Error clearing common areas from Supabase:", error);
+          throw error;
+        }
+      } else {
+        // Fallback to Firebase
+        const areaSnapshot = await getDocs(collection(db, "commonAreas"));
+        console.log(`📋 Found ${areaSnapshot.docs.length} common area documents to clear`);
         
-        // Skip if document doesn't have required fields
-        if (!data.area || !data.time) {
-          console.warn(`⚠️ Skipping document ${docId} - missing area or time field`, data);
-          return;
+        if (areaSnapshot.docs.length === 0) {
+          console.log("⚠️ No common area documents found in Firestore");
         }
         
-        console.log(`🔄 Clearing area: ${docId}`, { 
-          area: data.area, 
-          time: data.time, 
-          currentStatus: data.status, 
-          currentMaid: data.maid,
-          currentBorder: data.border 
-        });
-        
-        try {
-          // "ลบข้อมูล" logic for common areas:
-          // - Delete maid's nickname
-          // - Change green background to red (status: "waiting" shows red)
-          // - Change border to black
+        const areaPromises = areaSnapshot.docs.map(async (docSnap) => {
+          const docId = docSnap.id;
+          const data = docSnap.data();
+          
+          if (!data.area || !data.time) {
+            console.warn(`⚠️ Skipping document ${docId} - missing area or time field`, data);
+            return;
+          }
+          
           const updateData = {
-            status: "waiting", // Change green background to red (waiting = red background)
-            maid: "", // Delete maid's nickname
-            border: "black", // Change border to black
+            status: "waiting",
+            maid: "",
+            border: "black",
           };
           
-          // Preserve area and time if they exist
           if (data.area) updateData.area = data.area;
           if (data.time) updateData.time = data.time;
           
@@ -1564,14 +1672,11 @@ const Dashboard = () => {
             { merge: true }
           );
           console.log(`✅ Cleared area ${docId}`, updateData);
-        } catch (err) {
-          console.error(`❌ Error clearing area ${docId}:`, err);
-          throw err;
-        }
-      });
+        });
 
-      await Promise.all(areaPromises);
-      console.log(`✅ Successfully cleared ${areaSnapshot.docs.length} common areas to waiting state`);
+        await Promise.all(areaPromises);
+        console.log(`✅ Successfully cleared ${areaSnapshot.docs.length} common areas to waiting state`);
+      }
 
       alert("ข้อมูลทั้งหมดถูกล้างเรียบร้อยแล้ว ✅");
     } catch (error) {

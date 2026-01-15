@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "../services/firebase";
+import { supabase } from "../services/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CommonAreaCard = ({ area, time, data, nickname, isFO }) => {
@@ -53,24 +54,59 @@ const CommonAreaCard = ({ area, time, data, nickname, isFO }) => {
   const borderClass = border === "red" ? "border-2 border-red-600" : "border border-black";
   const isDisabled = isFO || !nickname || !nickname.trim();
 
-  // --- Firestore save ---
+  // --- Save area to Supabase or Firebase ---
   const saveArea = async (update) => {
-    const firestoreDocId = getDocId();
-    console.log("💾 Saving area:", { firestoreDocId, area, time, update });
-    try {
-      await setDoc(
-        doc(db, "commonAreas", firestoreDocId),
-        {
-          area,
-          time,
-          ...update,
-        },
-        { merge: true }
-      );
-      console.log("✅ Successfully saved to Firestore");
-    } catch (error) {
-      console.error("❌ Firestore save error:", error);
-      throw error;
+    const docId = getDocId();
+    console.log("💾 Saving area:", { docId, area, time, update });
+    
+    // Check if Supabase is configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+    const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+      supabaseUrl !== '' && supabaseAnonKey !== '' &&
+      !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key');
+
+    if (isSupabaseConfigured) {
+      // Use Supabase
+      try {
+        const updateData = {
+          id: docId,
+          area: area,
+          time: time,
+          status: update.status || 'waiting',
+          maid: update.maid || '',
+          border: update.border || 'black',
+          updated_at: new Date().toISOString(),
+          updated_by: nickname || 'unknown'
+        };
+
+        const { error } = await supabase
+          .from('common_areas')
+          .upsert(updateData, { onConflict: 'id' });
+
+        if (error) throw error;
+        console.log("✅ Successfully saved to Supabase");
+      } catch (error) {
+        console.error("❌ Supabase save error:", error);
+        throw error;
+      }
+    } else {
+      // Fallback to Firebase
+      try {
+        await setDoc(
+          doc(db, "commonAreas", docId),
+          {
+            area,
+            time,
+            ...update,
+          },
+          { merge: true }
+        );
+        console.log("✅ Successfully saved to Firestore");
+      } catch (error) {
+        console.error("❌ Firestore save error:", error);
+        throw error;
+      }
     }
   };
 
