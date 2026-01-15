@@ -10,14 +10,29 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // Initialize Supabase client
 // Use a scoped variable name to avoid conflicts with any global supabase variable
 let supabaseClientInstance = null;
+console.log('🚀 Initializing Supabase client...');
+console.log('📋 SUPABASE_URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET');
+console.log('📋 SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.substring(0, 20) + '...' : 'NOT SET');
+console.log('📋 supabaseClient available:', typeof supabaseClient !== 'undefined');
+
 try {
     if (SUPABASE_URL && SUPABASE_ANON_KEY && 
         SUPABASE_URL.startsWith('https://') && 
         SUPABASE_ANON_KEY.startsWith('eyJ') &&
         typeof supabaseClient !== 'undefined') {
         supabaseClientInstance = supabaseClient.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Supabase client created successfully');
+    } else {
+        console.warn('⚠️ Supabase client NOT created. Reasons:', {
+            hasUrl: !!SUPABASE_URL,
+            urlValid: SUPABASE_URL?.startsWith('https://'),
+            hasKey: !!SUPABASE_ANON_KEY,
+            keyValid: SUPABASE_ANON_KEY?.startsWith('eyJ'),
+            clientAvailable: typeof supabaseClient !== 'undefined'
+        });
     }
 } catch (e) {
+    console.error('❌ Error creating Supabase client:', e);
     console.warn('Supabase not configured. Using localStorage fallback.', e);
 }
 
@@ -34,10 +49,28 @@ let presenceUpdateInterval = null;
 
 // Check if Supabase is configured
 function checkSupabaseConfig() {
+    const hasClient = !!supabaseClientInstance;
+    const hasUrl = !!SUPABASE_URL;
+    const urlValid = SUPABASE_URL?.startsWith('https://');
+    const hasKey = !!SUPABASE_ANON_KEY;
+    const keyValid = SUPABASE_ANON_KEY?.startsWith('eyJ');
+    
+    console.log('🔍 checkSupabaseConfig():', {
+        hasClient,
+        hasUrl,
+        urlValid,
+        hasKey,
+        keyValid,
+        url: SUPABASE_URL?.substring(0, 30) + '...',
+        keyStart: SUPABASE_ANON_KEY?.substring(0, 20) + '...'
+    });
+    
     if (supabaseClientInstance && SUPABASE_URL && SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ')) {
         useSupabase = true;
         return true;
     }
+    
+    console.warn('❌ Supabase config check failed');
     return false;
 }
 
@@ -1654,17 +1687,25 @@ async function recordPurchase(item, status) {
 
 // Load data from Supabase or localStorage (async)
 async function loadData() {
+    console.log('📦 loadData() called');
+    console.log('🔍 Checking Supabase config...');
+    
     if (checkSupabaseConfig()) {
+        console.log('✅ Supabase config check passed');
         // Try loading from Supabase first
+        console.log('📥 Loading items from Supabase...');
         const supabaseItems = await loadItemsFromSupabase();
         if (supabaseItems !== null) {
+            console.log(`✅ Loaded ${supabaseItems.length} items from Supabase`);
             items = supabaseItems.map(item => migrateItemToV2(item));
         } else {
+            console.warn('⚠️ Failed to load from Supabase, using localStorage');
             // Fallback to localStorage
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 try {
                     items = JSON.parse(stored).map(item => migrateItemToV2(item));
+                    console.log(`📦 Loaded ${items.length} items from localStorage`);
                 } catch (e) {
                     console.error('Error loading data:', e);
                     items = [];
@@ -5867,6 +5908,14 @@ function checkMobileScreen() {
 
 // Initialize app on load v2
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎬 DOMContentLoaded - App initializing...');
+    console.log('📦 Supabase client check:', {
+        clientInstance: !!supabaseClientInstance,
+        supabaseClientGlobal: typeof supabaseClient !== 'undefined',
+        url: SUPABASE_URL?.substring(0, 30) + '...',
+        key: SUPABASE_ANON_KEY?.substring(0, 20) + '...'
+    });
+    
     // Force Thai language - language switcher is hidden
     currentLanguage = 'th';
     document.documentElement.lang = 'th';
