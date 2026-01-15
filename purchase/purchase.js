@@ -143,31 +143,51 @@ async function saveItemToSupabase(item) {
             console.log('No authenticated user, saving without user ID');
         }
         
-        // CRITICAL: Only include item_name if it's valid (not empty, not fallback)
-        // If name is invalid, skip it entirely to preserve existing database value (partial update)
-        const itemName = item.name;
+        // CRITICAL: item_name is NOT NULL - must always be included in UPSERT
+        // If local name is invalid, fetch existing value from database to preserve it
+        let itemName = item.name;
         const isValidName = itemName && 
                            itemName.trim() !== '' && 
                            itemName !== 'Unknown Item' &&
                            !itemName.startsWith('Unknown');
         
-        // Build itemData - only include fields that should be updated
+        // If name is invalid, fetch existing value from database
+        if (!isValidName) {
+            console.warn('⚠️ Item name invalid, fetching existing from database:', item.id);
+            try {
+                const { data: existingItem, error: fetchError } = await supabaseClientInstance
+                    .from('purchase_items')
+                    .select('item_name')
+                    .eq('id', item.id)
+                    .single();
+                
+                if (!fetchError && existingItem?.item_name && existingItem.item_name.trim() !== '') {
+                    itemName = existingItem.item_name;
+                    item.name = itemName; // Update local item too
+                    console.log('✅ Restored item name from database:', itemName);
+                } else {
+                    // If we can't get a valid name, use a safe fallback (but log warning)
+                    itemName = itemName || 'Item ' + item.id.substring(0, 8);
+                    console.warn('⚠️ Could not fetch existing name, using fallback:', itemName);
+                }
+            } catch (fetchErr) {
+                console.error('❌ Error fetching existing item name:', fetchErr);
+                // Use safe fallback if fetch fails
+                itemName = itemName || 'Item ' + item.id.substring(0, 8);
+            }
+        }
+        
+        // Build itemData - ALWAYS include item_name (NOT NULL constraint)
         // Map JavaScript property names to database column names
         const itemData = {
             id: item.id,
+            item_name: itemName, // ALWAYS include - required NOT NULL column
             quantity: item.quantity || 0,
             unit: item.unit || '',
             supplier: item.supplier || '',
             status: item.status,
             updated_at: new Date().toISOString()
         };
-        
-        // Only include item_name if it's valid - otherwise let database keep existing value
-        if (isValidName) {
-            itemData.item_name = itemName;
-        } else {
-            console.warn('⚠️ Skipping item_name in update (invalid or empty):', item.id);
-        }
         
         // Add optional columns only if they have values (to avoid schema errors)
         if (item.requested_qty !== undefined || item.quantity !== undefined) {
@@ -196,32 +216,28 @@ async function saveItemToSupabase(item) {
         
         console.log('💾 Saving item to Supabase:', {
             id: item.id,
-            name: isValidName ? itemName : '(preserving existing)',
+            name: itemName,
             status: item.status,
             hasUser: !!user,
-            includingName: isValidName
+            nameSource: isValidName ? 'local' : 'database'
         });
         
-        // Use PATCH-like behavior: only update fields that are included
-        // Supabase upsert with onConflict will merge, not replace
+        // UPSERT with onConflict - must include all NOT NULL columns
         let { data, error } = await supabaseClientInstance
             .from('purchase_items')
             .upsert(itemData, { onConflict: 'id' });
         
-        // If error is about missing columns, try again with minimal columns (never include invalid name)
+        // If error is about missing columns, try again with minimal columns (but ALWAYS include item_name)
         if (error && error.code === 'PGRST204') {
             console.warn('⚠️ Column missing error, retrying with minimal columns:', error.message);
             const minimalData = {
                 id: item.id,
+                item_name: itemName, // ALWAYS include - NOT NULL constraint
                 quantity: item.quantity || 0,
                 unit: item.unit || '',
                 supplier: item.supplier || '',
                 status: item.status
             };
-            // Only add name if valid
-            if (isValidName) {
-                minimalData.item_name = itemName;
-            }
             const retryResult = await supabaseClientInstance
                 .from('purchase_items')
                 .upsert(minimalData, { onConflict: 'id' });
