@@ -287,8 +287,8 @@ const Dashboard = () => {
       return () => unsubscribe();
     }
 
-    // Load initial common areas from Supabase
-    const loadCommonAreas = async () => {
+    // Load common areas from Supabase
+    const loadCommonAreas = async (isInitial = false) => {
       try {
         const { data, error } = await supabase
           .from('common_areas')
@@ -307,7 +307,9 @@ const Dashboard = () => {
             border: row.border || 'black'
           }));
           setCommonAreas(areas);
-          console.log("✅ Initial load of common areas from Supabase completed");
+          if (isInitial) {
+            console.log("✅ Initial load of common areas from Supabase completed");
+          }
         } else {
           setCommonAreas([]);
         }
@@ -317,7 +319,10 @@ const Dashboard = () => {
       }
     };
 
-    loadCommonAreas();
+    // Load initial common areas
+    loadCommonAreas(true).then(() => {
+      isInitialCommonAreasLoad.current = false;
+    });
 
     // Set up real-time subscription for common areas
     const channel = supabase
@@ -330,10 +335,22 @@ const Dashboard = () => {
           table: 'common_areas'
         },
         (payload) => {
-          // Reload all common areas to ensure consistency
-          loadCommonAreas().then(() => {
-            console.log("✅ Common areas updated from Supabase");
-          });
+          // Skip if this is the initial load (we already loaded above)
+          if (isInitialCommonAreasLoad.current) {
+            return;
+          }
+
+          // Debounce rapid updates
+          if (commonAreasReloadTimeout.current) {
+            clearTimeout(commonAreasReloadTimeout.current);
+          }
+
+          commonAreasReloadTimeout.current = setTimeout(() => {
+            commonAreasReloadTimeout.current = null;
+            loadCommonAreas(false).then(() => {
+              console.log("✅ Common areas updated from Supabase");
+            });
+          }, 100); // 100ms debounce
         }
       )
       .subscribe((status) => {
@@ -345,6 +362,10 @@ const Dashboard = () => {
       });
 
     return () => {
+      if (commonAreasReloadTimeout.current) {
+        clearTimeout(commonAreasReloadTimeout.current);
+        commonAreasReloadTimeout.current = null;
+      }
       supabase.removeChannel(channel);
     };
   }, []);
@@ -385,6 +406,8 @@ const Dashboard = () => {
   const isInitialLoad = useRef(true);
   const isUploadingPDF = useRef(false);
   const realtimeReloadTimeout = useRef(null); // Ref for debouncing realtime reloads
+  const isInitialCommonAreasLoad = useRef(true); // Track initial load for common areas
+  const commonAreasReloadTimeout = useRef(null); // Ref for debouncing common areas realtime reloads
   const inhouseFileInputRef = useRef(null); // Ref for inhouse file input
   const departureFileInputRef = useRef(null); // Ref for departure file input
   
