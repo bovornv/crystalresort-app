@@ -154,7 +154,7 @@ async function saveItemToSupabase(item) {
             received_qty: item.received_qty || 0,
             urgency: item.urgency || 'normal',
             issue_type: item.issue_type || null,
-            issueReason: item.issueReason || null,
+            issue_reason: item.issueReason || null, // Map camelCase to snake_case for database
             updated_by: user?.id || null,
             updated_at: new Date().toISOString()
         };
@@ -1822,6 +1822,11 @@ async function loadData() {
 
 // Migrate item to v2 data model
 function migrateItemToV2(item) {
+    // Map snake_case database columns to camelCase JavaScript properties
+    if (item.issue_reason !== undefined && item.issueReason === undefined) {
+        item.issueReason = item.issue_reason;
+    }
+    
     // Ensure v2 fields exist
     if (!item.requested_qty) item.requested_qty = item.quantity || 0;
     if (!item.received_qty) item.received_qty = item.actualQuantity || 0;
