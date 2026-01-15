@@ -3304,58 +3304,19 @@ async function handleEditItem(event) {
     }
 }
 
-// Show receiving modal v2
+// Show receiving modal v2 (simplified - only issue selection)
 function showReceivingModal(itemId) {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
 
-    const requestedQty = item.requested_qty || item.quantity || 0;
-    const receivedQty = item.received_qty || 0;
-    const remainingQty = requestedQty - receivedQty;
-
     document.getElementById('receivingItemId').value = item.id;
-    const unitDisplay = getUnitDisplayName(item.unit);
-    document.getElementById('receivingRequestedQty').textContent = `${requestedQty} ${unitDisplay}`;
-    document.getElementById('receivingPreviousQty').textContent = `${receivedQty} ${unitDisplay} (${remainingQty} remaining)`;
-    document.getElementById('receivingActualQty').value = '';
-    document.getElementById('receivingActualQty').max = remainingQty * 2; // Allow up to 2x remaining
     
-    // Set quality check radio
-    const issueTypeGroup = document.getElementById('issueTypeGroup');
-    const issueReasonGroup = document.getElementById('issueReasonGroup');
-    
-    if (item.qualityCheck === 'issue') {
-        document.querySelector('input[name="qualityCheck"][value="issue"]').checked = true;
-        document.getElementById('issueType').value = item.issue_type || '';
-        document.getElementById('issueReason').value = item.issueReason || '';
-        issueTypeGroup.style.display = 'block';
-        issueReasonGroup.style.display = 'block';
-    } else {
-        document.querySelector('input[name="qualityCheck"][value="ok"]').checked = true;
-        issueTypeGroup.style.display = 'none';
-        issueReasonGroup.style.display = 'none';
-    }
+    // Set issue type and reason if they exist
+    document.getElementById('issueType').value = item.issue_type || '';
+    document.getElementById('issueReason').value = item.issueReason || '';
 
     const modal = document.getElementById('receivingModal');
     modal.classList.add('active');
-}
-
-// Handle quality check radio change v2
-function handleQualityCheckChange() {
-    const qualityCheck = document.querySelector('input[name="qualityCheck"]:checked').value;
-    const issueTypeGroup = document.getElementById('issueTypeGroup');
-    const issueReasonGroup = document.getElementById('issueReasonGroup');
-    const issueTypeInput = document.getElementById('issueType');
-    
-    if (qualityCheck === 'issue') {
-        issueTypeGroup.style.display = 'block';
-        issueReasonGroup.style.display = 'block';
-        issueTypeInput.required = true;
-    } else {
-        issueTypeGroup.style.display = 'none';
-        issueReasonGroup.style.display = 'none';
-        issueTypeInput.required = false;
-    }
 }
 
 // Close receiving modal
@@ -3617,22 +3578,21 @@ async function handleReceiving(event) {
     const item = items.find(i => i.id === itemId);
     if (!item) return;
 
-    const receivedThisTime = parseFloat(document.getElementById('receivingActualQty').value);
-    const qualityCheck = document.querySelector('input[name="qualityCheck"]:checked').value;
-    const issueType = qualityCheck === 'issue' ? document.getElementById('issueType').value : null;
-    const issueReason = qualityCheck === 'issue' ? document.getElementById('issueReason').value.trim() : null;
+    const issueType = document.getElementById('issueType').value;
+    const issueReason = document.getElementById('issueReason').value.trim() || null;
 
     const now = Date.now();
-    const previousReceived = item.received_qty || 0;
-    const newReceivedQty = previousReceived + receivedThisTime;
     const requestedQty = item.requested_qty || item.quantity || 0;
-
-    // Update received quantity (partial receive support)
-    item.received_qty = newReceivedQty;
-    item.actualQuantity = newReceivedQty; // Keep for backward compatibility
     
-    // Update quality check
-    item.qualityCheck = qualityCheck;
+    // Update received quantity to full requested quantity
+    item.received_qty = requestedQty;
+    item.actualQuantity = requestedQty; // Keep for backward compatibility
+    
+    // Always set as issue
+    item.qualityCheck = 'issue';
+    item.issue = true;
+    item.issue_type = issueType;
+    item.issueReason = issueReason;
     
     // Update status timestamps
     if (!item.statusTimestamps) item.statusTimestamps = {};
@@ -3640,48 +3600,21 @@ async function handleReceiving(event) {
         item.statusTimestamps['received'] = now;
     }
     
+    // Move to verified/issue column
+    item.status = 'verified';
+    if (!item.statusTimestamps['verified']) {
+        item.statusTimestamps['verified'] = now;
+    }
+    
     item.lastUpdated = now;
 
     // Track history
-    const unitDisplay = getUnitDisplayName(unit);
-    const action = qualityCheck === 'ok' 
-        ? `Received ${receivedThisTime} ${unitDisplay} - Quality OK`
-        : `${t('received')} ${receivedThisTime} ${unitDisplay} - ${t('issues')}: ${getIssueTypeLabel(issueType) || issueType}`;
+    const unitDisplay = getUnitDisplayName(item.unit);
+    const action = `${t('received')} ${requestedQty} ${unitDisplay} - ${t('issues')}: ${getIssueTypeLabel(issueType) || issueType}`;
     addItemHistory(itemId, action, currentUser);
 
-    if (qualityCheck === 'issue') {
-        item.issue = true;
-        item.issue_type = issueType;
-        item.issueReason = issueReason;
-        // Move to verified/issue column
-        item.status = 'verified';
-        if (!item.statusTimestamps['verified']) {
-            item.statusTimestamps['verified'] = now;
-        }
-        // Record purchase with issue status
-        await recordPurchase(item, 'Issue');
-    } else {
-        // Quality OK
-        if (newReceivedQty >= requestedQty) {
-            // Fully received - move to verified
-            item.issue = false;
-            item.issue_type = null;
-            item.issueReason = null;
-            item.status = 'verified';
-            if (!item.statusTimestamps['verified']) {
-                item.statusTimestamps['verified'] = now;
-            }
-            // Record purchase with OK status
-            await recordPurchase(item, 'OK');
-        } else {
-            // Partial receive - stay in received or move from bought
-            if (item.status === 'bought') {
-                item.status = 'received';
-            }
-            // If already in received, stay there
-            // Don't record partial receives yet - wait for full receive
-        }
-    }
+    // Record purchase with issue status
+    await recordPurchase(item, 'Issue');
 
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {

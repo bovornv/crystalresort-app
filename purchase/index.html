@@ -459,32 +459,6 @@
             <form id="receivingForm" onsubmit="handleReceiving(event)">
                 <input type="hidden" id="receivingItemId">
                 <div class="form-group">
-                    <label data-i18n="requestedQty">Requested Quantity</label>
-                    <div class="info-display" id="receivingRequestedQty"></div>
-                </div>
-                <div class="form-group">
-                    <label data-i18n="previouslyReceived">Previously Received</label>
-                    <div class="info-display" id="receivingPreviousQty">0</div>
-                </div>
-                <div class="form-group">
-                    <label for="receivingActualQty" data-i18n="receivedQuantityThisTime">Received Quantity This Time *</label>
-                    <input type="number" id="receivingActualQty" step="0.01" min="0" required>
-                    <small class="form-hint" data-i18n="enterQuantityReceived">Enter quantity received in this delivery</small>
-                </div>
-                <div class="form-group">
-                    <label data-i18n="qualityCheck">Quality Check *</label>
-                    <div class="radio-group">
-                        <label>
-                            <input type="radio" name="qualityCheck" value="ok" checked onchange="handleQualityCheckChange()">
-                            <span data-i18n="freshOk">✔ Fresh / OK</span>
-                        </label>
-                        <label>
-                            <input type="radio" name="qualityCheck" value="issue" onchange="handleQualityCheckChange()">
-                            <span data-i18n="issue">⚠ Issue</span>
-                        </label>
-                    </div>
-                </div>
-                <div class="form-group" id="issueTypeGroup" style="display: none;">
                     <label for="issueType" data-i18n="issueType">Issue Type *</label>
                     <select id="issueType" required>
                         <option value="" data-i18n="selectIssueType">Select issue type...</option>
@@ -495,7 +469,7 @@
                         <option value="other" data-i18n="other">Other</option>
                     </select>
                 </div>
-                <div class="form-group" id="issueReasonGroup" style="display: none;">
+                <div class="form-group">
                     <label for="issueReason" data-i18n="issueReason">Issue Details</label>
                     <textarea id="issueReason" rows="3" data-i18n-placeholder="additionalDetails" placeholder="Additional details about the issue..."></textarea>
                 </div>
