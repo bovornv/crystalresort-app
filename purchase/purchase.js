@@ -432,33 +432,48 @@ async function savePurchaseRecordToSupabase(record) {
             // User not authenticated - that's okay
         }
         
+        // DO NOT include id - let Supabase auto-generate UUID
         const recordData = {
-            id: record.id,
             item_id: record.itemId || null,
             item_name: record.itemName,
             supplier: record.supplier,
             quantity: record.quantity,
             unit: record.unit,
             status: record.status,
-            receiver: record.receiver ? JSON.stringify(record.receiver) : null,
             issue_type: record.issueType || null,
             issue_reason: record.issueReason || null,
             created_at: new Date(record.date).toISOString()
         };
         
-        // Only include created_by if user exists
+        // Only include receiver if column exists (optional field)
+        if (record.receiver) {
+            try {
+                recordData.receiver = JSON.stringify(record.receiver);
+            } catch (e) {
+                // Skip receiver if it causes issues
+            }
+        }
+        
+        // Only include created_by if user exists (optional field)
         if (user?.id) {
             recordData.created_by = user.id;
         }
         
+        // Insert without id - let Supabase auto-generate UUID
         let { error } = await supabaseClientInstance
             .from('purchase_history')
             .insert(recordData);
         
-        // If error is about missing created_by column, retry without it
-        if (error && error.code === 'PGRST204' && error.message?.includes('created_by')) {
-            console.warn('⚠️ created_by column missing, retrying without it');
-            delete recordData.created_by;
+        // If error is about missing created_by or receiver column, retry without them
+        if (error && error.code === 'PGRST204') {
+            if (error.message?.includes('created_by')) {
+                console.warn('⚠️ created_by column missing, retrying without it');
+                delete recordData.created_by;
+            }
+            if (error.message?.includes('receiver')) {
+                console.warn('⚠️ receiver column missing, retrying without it');
+                delete recordData.receiver;
+            }
             const retryResult = await supabaseClientInstance
                 .from('purchase_history')
                 .insert(recordData);
