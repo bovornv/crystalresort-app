@@ -61,10 +61,24 @@ async function loadItemsFromSupabase() {
 }
 
 async function saveItemToSupabase(item) {
-    if (!checkSupabaseConfig()) return false;
+    if (!checkSupabaseConfig()) {
+        console.warn('Supabase not configured, skipping save');
+        return false;
+    }
     
     try {
-        const { data: { user } } = await supabaseClientInstance.auth.getUser();
+        // Try to get user, but don't fail if not authenticated
+        let user = null;
+        try {
+            const { data: { user: authUser }, error: authError } = await supabaseClientInstance.auth.getUser();
+            if (!authError && authUser) {
+                user = authUser;
+            }
+        } catch (authErr) {
+            // User not authenticated - that's okay, we'll save without user ID
+            console.log('No authenticated user, saving without user ID');
+        }
+        
         const itemData = {
             id: item.id,
             name: item.name,
@@ -86,11 +100,23 @@ async function saveItemToSupabase(item) {
             itemData.created_by = user.id;
         }
         
-        const { error } = await supabaseClientInstance
+        console.log('💾 Saving item to Supabase:', {
+            id: item.id,
+            name: item.name,
+            status: item.status,
+            hasUser: !!user
+        });
+        
+        const { data, error } = await supabaseClientInstance
             .from('purchase_items')
             .upsert(itemData, { onConflict: 'id' });
         
-        if (error) throw error;
+        if (error) {
+            console.error('❌ Supabase save error:', error);
+            throw error;
+        }
+        
+        console.log('✅ Item saved to Supabase successfully');
         
         // When status changes to 'received', insert snapshot into purchase_history
         if (item.status === 'received') {
@@ -99,7 +125,13 @@ async function saveItemToSupabase(item) {
         
         return true;
     } catch (e) {
-        console.error('Error saving item to Supabase:', e);
+        console.error('❌ Error saving item to Supabase:', e);
+        console.error('Error details:', {
+            message: e.message,
+            code: e.code,
+            details: e.details,
+            hint: e.hint
+        });
         return false;
     }
 }
@@ -314,19 +346,22 @@ function setupRealtimeSubscriptions() {
                 filter: undefined
             },
             async (payload) => {
-                console.log('Purchase items changed:', payload.eventType, payload.new || payload.old);
+                console.log('🔄 Purchase items changed:', payload.eventType, payload.new || payload.old);
                 
                 if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                     const updatedItem = migrateItemToV2(payload.new);
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
+                        console.log('📝 Updating existing item:', updatedItem.name);
                         items[index] = updatedItem;
                     } else {
+                        console.log('➕ Adding new item:', updatedItem.name);
                         items.push(updatedItem);
                     }
                     renderBoard();
                     updatePresenceIndicator();
                 } else if (payload.eventType === 'DELETE') {
+                    console.log('🗑️ Deleting item:', payload.old?.name || payload.old?.id);
                     items = items.filter(i => i.id !== payload.old.id);
                     renderBoard();
                     updatePresenceIndicator();
@@ -335,9 +370,11 @@ function setupRealtimeSubscriptions() {
         )
         .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-                console.log('Subscribed to purchase_items realtime changes');
+                console.log('✅ Subscribed to purchase_items realtime changes');
             } else if (status === 'CHANNEL_ERROR') {
-                console.error('Error subscribing to purchase_items changes');
+                console.error('❌ Error subscribing to purchase_items changes:', status);
+            } else {
+                console.log('🔄 Subscription status:', status);
             }
         });
     
@@ -974,6 +1011,7 @@ const translations = {
         'user': 'ผู้ใช้',
         'save': 'บันทึก',
         'saveChanges': 'บันทึกการเปลี่ยนแปลง',
+        'save': 'บันทึก',
         'cancel': 'ยกเลิก',
         'close': 'ปิด',
         'yes': 'ใช่',
@@ -2474,16 +2512,16 @@ function updateTopBarStats() {
 }
 
 // Update today's date in top bar
-// Format Thai date: วันอังคาร 13 มกราคม 2569
+// Format Thai date: วันพฤหัส 15 มค 69
 function formatThaiDate(date) {
-    const thaiDays = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัสบดี', 'วันศุกร์', 'วันเสาร์'];
-    const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 
-                        'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    const thaiDays = ['วันอาทิตย์', 'วันจันทร์', 'วันอังคาร', 'วันพุธ', 'วันพฤหัส', 'วันศุกร์', 'วันเสาร์'];
+    const thaiMonths = ['มค', 'กพ', 'มีค', 'เมย', 'พค', 'มิย', 
+                        'กค', 'สค', 'กย', 'ตค', 'พย', 'ธค'];
     
     const dayName = thaiDays[date.getDay()];
     const day = date.getDate();
     const monthName = thaiMonths[date.getMonth()];
-    const buddhistYear = date.getFullYear() + 543; // Convert to Buddhist Era
+    const buddhistYear = (date.getFullYear() + 543).toString().slice(-2); // Convert to Buddhist Era and get last 2 digits
     
     return `${dayName} ${day} ${monthName} ${buddhistYear}`;
 }
@@ -2621,7 +2659,6 @@ function createItemCard(item) {
                     ${item.status !== 'received' ? `
                     <div class="item-mobile-actions">
                         <button class="item-mobile-btn item-edit-btn" onclick="editItem('${item.id}')" title="${t('editItem')}">✏️</button>
-                        <button class="item-mobile-btn item-delete-btn" onclick="deleteItem('${item.id}')" title="${t('delete')}">🗑️</button>
                     </div>
                     ` : ''}
                     ${isQuickReceiveEligible ? `
@@ -2665,7 +2702,6 @@ function createItemCard(item) {
                     ${item.status !== 'received' ? `
                     <div class="item-desktop-actions">
                         <button class="item-desktop-btn item-edit-btn" onclick="editItem('${item.id}')" title="${t('editItem')}">✏️</button>
-                        <button class="item-desktop-btn item-delete-btn" onclick="deleteItem('${item.id}')" title="${t('delete')}">🗑️</button>
                     </div>
                     ` : ''}
                     ${isQuickReceiveEligible ? `
@@ -2804,9 +2840,13 @@ function getActionButtons(item) {
         const nextStatus = COLUMN_ORDER[statusIndex + 1];
         let nextStatusLabel = getColumnLabel(nextStatus);
         
+        // Custom labels when moving from "need-to-buy" to "ordered"
+        if (item.status === 'need-to-buy' && nextStatus === 'ordered') {
+            nextStatusLabel = currentLanguage === 'th' ? 'พร้อมสั่ง' : 'Ready to Order';
+        }
         // Custom labels when moving from "ordered" to "bought" (same for all screen sizes)
-        if (item.status === 'ordered' && nextStatus === 'bought') {
-            nextStatusLabel = currentLanguage === 'th' ? 'สั่งซื้อแล้ว' : 'Bought';
+        else if (item.status === 'ordered' && nextStatus === 'bought') {
+            nextStatusLabel = currentLanguage === 'th' ? 'สั่งแล้ว' : 'Bought';
         }
         
         // Use same labels for all screen sizes (no arrow prefix)
@@ -2930,7 +2970,12 @@ async function handleAddItem(event) {
     
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(newItem);
+        const saved = await saveItemToSupabase(newItem);
+        if (!saved) {
+            console.warn('⚠️ Failed to save item to Supabase, but item added locally');
+        }
+    } else {
+        console.warn('⚠️ Supabase not configured, item saved to localStorage only');
     }
     
     // Save data (fire-and-forget, don't await to avoid blocking UI)
@@ -2956,6 +3001,15 @@ function editItem(itemId) {
 
     const modal = document.getElementById('editItemModal');
     modal.classList.add('active');
+}
+
+// Handle delete from edit modal
+async function handleDeleteFromEditModal() {
+    const itemId = document.getElementById('editItemId').value;
+    if (!itemId) return;
+    
+    closeEditItemModal();
+    await deleteItem(itemId);
 }
 
 // Close edit item modal
