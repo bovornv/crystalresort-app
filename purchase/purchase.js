@@ -207,17 +207,26 @@ async function insertPurchaseHistory(item, userId) {
     try {
         // Check if history record already exists for this item to avoid duplicates
         // Look for records with same item_id created in the last minute (prevents rapid duplicate saves)
-        const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
-        const { data: existing } = await supabaseClientInstance
-            .from('purchase_history')
-            .select('id')
-            .eq('item_id', item.id)
-            .gte('created_at', oneMinuteAgo)
-            .limit(1);
-        
-        // Only insert if no recent record (prevent duplicates from multiple rapid saves)
-        if (existing && existing.length > 0) {
-            return true; // Already recorded recently
+        // Note: If created_at column doesn't exist, skip duplicate check
+        try {
+            const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+            const { data: existing, error: checkError } = await supabaseClientInstance
+                .from('purchase_history')
+                .select('id')
+                .eq('item_id', item.id)
+                .gte('created_at', oneMinuteAgo)
+                .limit(1);
+            
+            // Only skip if column exists and we found a recent record
+            if (!checkError && existing && existing.length > 0) {
+                return true; // Already recorded recently
+            }
+        } catch (e) {
+            // If created_at column doesn't exist (code 42703), continue with insert
+            // Otherwise, log the error but continue
+            if (e.code !== '42703') {
+                console.warn('Warning checking for duplicate history record:', e);
+            }
         }
         
         const historyData = {
@@ -271,13 +280,38 @@ async function loadPurchaseRecordsFromSupabase() {
     if (!checkSupabaseConfig()) return null;
     
     try {
-        const { data, error } = await supabaseClientInstance
+        // Try ordering by created_at first, fallback to id if column doesn't exist
+        let query = supabaseClientInstance
             .from('purchase_history')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select('*');
         
-        if (error) throw error;
-        return data || [];
+        // Try to order by created_at, but handle if column doesn't exist
+        try {
+            const { data, error } = await query.order('created_at', { ascending: false });
+            if (error && error.code === '42703') {
+                // Column doesn't exist, try ordering by id instead (ids are timestamp-based)
+                console.warn('⚠️ created_at column not found, ordering by id instead');
+                const { data: data2, error: error2 } = await supabaseClientInstance
+                    .from('purchase_history')
+                    .select('*')
+                    .order('id', { ascending: false });
+                if (error2) throw error2;
+                return data2 || [];
+            }
+            if (error) throw error;
+            return data || [];
+        } catch (e) {
+            // If ordering fails, try without order or by id
+            if (e.code === '42703') {
+                const { data, error } = await supabaseClientInstance
+                    .from('purchase_history')
+                    .select('*')
+                    .order('id', { ascending: false });
+                if (error) throw error;
+                return data || [];
+            }
+            throw e;
+        }
     } catch (e) {
         console.error('Error loading purchase history from Supabase:', e);
         return null;
