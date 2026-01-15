@@ -28,6 +28,38 @@
         .top-bar-date {
             color: #ffffff !important;
         }
+        .top-bar-right {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        .user-menu-container {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+        @media (min-width: 641px) {
+            .top-bar-content {
+                flex-direction: row !important;
+            }
+        }
+        @media (max-width: 640px) {
+            .top-bar-right {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            .user-menu-container {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+            .user-menu-btn {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
+        }
     </style>
     <!-- Supabase Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
