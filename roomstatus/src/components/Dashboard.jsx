@@ -4,6 +4,7 @@ import CommonAreaCard from "./CommonAreaCard";
 import * as pdfjsLib from "pdfjs-dist";
 import { db } from "../services/firebase";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
+import { supabase } from "../services/supabase";
 
 // Configure PDF.js worker for Vite - use worker from node_modules to ensure version match
 // Use jsDelivr CDN which is more reliable than unpkg/cdnjs for worker files
@@ -223,8 +224,88 @@ const Dashboard = () => {
   const inhouseFileInputRef = useRef(null); // Ref for inhouse file input
   const departureFileInputRef = useRef(null); // Ref for departure file input
   
-  // Helper function to immediately update Firestore (for real-time sync)
+  // Helper function to convert room array to Supabase rows format
+  const roomsToRows = (roomsArray) => {
+    return roomsArray.map(room => ({
+      room_number: String(room.number),
+      type: room.type || "",
+      floor: room.floor || parseInt(String(room.number)[0]) || 1,
+      status: room.status || "vacant",
+      maid: room.maid || "",
+      remark: room.remark || "",
+      cleaned_today: room.cleanedToday || false,
+      border: room.border || "black",
+      vacant_since: room.vacantSince || null,
+      was_purple_before_cleaned: room.wasPurpleBeforeCleaned || false,
+      updated_at: new Date().toISOString()
+    }));
+  };
+
+  // Helper function to convert Supabase rows to room array format
+  const rowsToRooms = (rows) => {
+    return rows.map(row => ({
+      number: String(row.room_number),
+      type: row.type || "",
+      floor: row.floor || parseInt(String(row.room_number)[0]) || 1,
+      status: row.status || "vacant",
+      maid: row.maid || "",
+      remark: row.remark || "",
+      cleanedToday: row.cleaned_today || false,
+      border: row.border || "black",
+      vacantSince: row.vacant_since || null,
+      wasPurpleBeforeCleaned: row.was_purple_before_cleaned || false
+    }));
+  };
+
+  // Helper function to immediately update Supabase (for real-time sync)
+  const updateSupabaseImmediately = async (updatedRooms) => {
+    try {
+      const migratedRooms = migrateMovedOutToCheckedOut(updatedRooms);
+      const rows = roomsToRows(migratedRooms);
+      
+      // Update each room row in Supabase (upsert by room_number)
+      const updatePromises = rows.map(row => {
+        return supabase
+          .from('roomstatus_rooms')
+          .upsert({
+            room_number: row.room_number,
+            type: row.type,
+            floor: row.floor,
+            status: row.status,
+            maid: row.maid,
+            remark: row.remark,
+            cleaned_today: row.cleaned_today,
+            border: row.border,
+            vacant_since: row.vacant_since,
+            was_purple_before_cleaned: row.was_purple_before_cleaned,
+            updated_at: row.updated_at
+          }, {
+            onConflict: 'room_number'
+          });
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // Update localStorage for local persistence
+      try {
+        localStorage.setItem('crystal_rooms', JSON.stringify(updatedRooms));
+      } catch (error) {
+        console.error("Error saving to localStorage:", error);
+      }
+      
+      console.log(`✅ Supabase updated immediately - real-time sync triggered (${migratedRooms.length} rooms, updated by: ${nickname || "unknown"})`);
+    } catch (error) {
+      console.error("Error updating Supabase:", error);
+      // Re-throw error so caller knows update failed
+      throw error;
+    }
+  };
+
+  // Helper function to immediately update Firestore (for real-time sync) - KEPT FOR BACKWARD COMPATIBILITY
   const updateFirestoreImmediately = async (updatedRooms) => {
+    // Also update Supabase
+    await updateSupabaseImmediately(updatedRooms);
+    
     try {
       const roomsCollection = collection(db, "rooms");
       const roomsDoc = doc(roomsCollection, "allRooms");
@@ -243,18 +324,10 @@ const Dashboard = () => {
       // The rooms array is always complete, so this will update it correctly
       await setDoc(roomsDoc, cleanedPayload, { merge: true });
       
-      // Update localStorage for local persistence
-      try {
-        localStorage.setItem('crystal_rooms', JSON.stringify(updatedRooms));
-      } catch (error) {
-        console.error("Error saving to localStorage:", error);
-      }
-      
       console.log(`✅ Firestore updated immediately - real-time sync triggered (${migratedRooms.length} rooms, updated by: ${nickname || "unknown"})`);
     } catch (error) {
       console.error("Error updating Firestore:", error);
-      // Re-throw error so caller knows update failed
-      throw error;
+      // Don't re-throw - Supabase update succeeded
     }
   };
 
@@ -291,14 +364,14 @@ const Dashboard = () => {
       });
     });
     
-    // Update Firestore immediately for real-time sync
-    // Wait for Firestore write to complete to ensure sync happens
+    // Update Supabase immediately for real-time sync
+    // Wait for Supabase write to complete to ensure sync happens
     try {
-      await updateFirestoreImmediately(updatedRooms);
-      console.log(`✅ Room ${roomNumber} updated and synced to Firestore`);
+      await updateSupabaseImmediately(updatedRooms);
+      console.log(`✅ Room ${roomNumber} updated and synced to Supabase`);
     } catch (err) {
-      console.error("Error updating room in Firestore:", err);
-      // Still update local state even if Firestore fails
+      console.error("Error updating room in Supabase:", err);
+      // Still update local state even if Supabase fails
     }
   };
 
@@ -438,123 +511,165 @@ const Dashboard = () => {
     });
   };
 
-  // Rooms state - Firestore is the single source of truth
-  // Start with empty array, Firestore will populate it via onSnapshot
+  // Rooms state - Supabase is the single source of truth
+  // Start with empty array, Supabase will populate it via realtime subscription
   const [rooms, setRooms] = useState([]);
 
-  // Initialize Firestore sync - Firestore is the single source of truth
+  // Initialize Supabase sync - Supabase is the single source of truth
   useEffect(() => {
-    const roomsCollection = collection(db, "rooms");
-    const roomsDoc = doc(roomsCollection, "allRooms");
+    // Check if Supabase is configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+    const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+      supabaseUrl !== '' && supabaseAnonKey !== '' &&
+      !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
-    // Load from Firestore once on initial mount (only if document exists)
-    const loadFromFirestoreOnce = async () => {
+    if (!isSupabaseConfigured) {
+      console.error('❌ Supabase not configured - environment variables missing!')
+      console.error('   App will continue using Firebase. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.')
+      isInitialLoad.current = false;
+      return; // Exit early, Firebase code will handle initialization
+    }
+
+    console.log('🔄 Attempting to load from Supabase...')
+
+    // Load from Supabase once on initial mount
+    const loadFromSupabaseOnce = async () => {
       try {
-        const snapshot = await getDoc(roomsDoc);
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-          if (data.rooms && Array.isArray(data.rooms) && data.rooms.length > 0) {
-            // Firestore has data, use it
-            const migratedRooms = migrateMovedOutToCheckedOut(data.rooms);
-            setRooms(migratedRooms);
-            console.log("✅ Initial load from Firestore completed");
-          } else {
-            // Firestore document exists but no rooms array, initialize with defaultRooms
-            const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
-            setRooms(migratedRooms);
-            // Write to Firestore to initialize
-            setDoc(roomsDoc, {
-              rooms: migratedRooms,
-              lastUpdated: new Date().toISOString()
-            }, { merge: true }).catch(err => console.error("Error initializing Firestore:", err));
-            console.log("✅ Initialized Firestore with default rooms");
-          }
-        } else {
-          // Document doesn't exist, initialize with defaultRooms
+        const { data: rows, error } = await supabase
+          .from('roomstatus_rooms')
+          .select('*')
+          .order('room_number', { ascending: true });
+
+        if (error) {
+          console.error("❌ Error loading from Supabase:", error);
+          console.error("   Error details:", {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint
+          });
+          console.error("   Falling back to Firebase. Please check:")
+          console.error("   1. Supabase table 'roomstatus_rooms' exists")
+          console.error("   2. Environment variables are set correctly")
+          console.error("   3. Row Level Security policies allow access")
+          // On error during initial load, use defaultRooms as fallback
           const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
           setRooms(migratedRooms);
-          // Write to Firestore to initialize
-          setDoc(roomsDoc, {
-            rooms: migratedRooms,
-            lastUpdated: new Date().toISOString()
-          }, { merge: true }).catch(err => console.error("Error initializing Firestore:", err));
-          console.log("✅ Initialized Firestore with default rooms");
+          // Try to initialize Supabase with default rooms
+          try {
+            const defaultRows = roomsToRows(migratedRooms);
+            const { error: upsertError } = await supabase.from('roomstatus_rooms').upsert(defaultRows, { onConflict: 'room_number' });
+            if (upsertError) {
+              console.error("❌ Error initializing Supabase:", upsertError);
+            } else {
+              console.log("✅ Initialized Supabase with default rooms");
+            }
+          } catch (initError) {
+            console.error("❌ Error initializing Supabase:", initError);
+          }
+        } else if (rows && rows.length > 0) {
+          // Supabase has data, use it
+          const roomsArray = rowsToRooms(rows);
+          const migratedRooms = migrateMovedOutToCheckedOut(roomsArray);
+          setRooms(migratedRooms);
+          console.log("✅ Initial load from Supabase completed");
+        } else {
+          // No data in Supabase, initialize with defaultRooms
+          console.log("⚠️ Supabase table is empty, initializing with default rooms...");
+          const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
+          setRooms(migratedRooms);
+          // Initialize Supabase with default rooms
+          const defaultRows = roomsToRows(migratedRooms);
+          const { error: upsertError } = await supabase.from('roomstatus_rooms').upsert(defaultRows, { onConflict: 'room_number' });
+          if (upsertError) {
+            console.error("❌ Error initializing Supabase:", upsertError);
+          } else {
+            console.log("✅ Initialized Supabase with default rooms");
+          }
         }
       } catch (error) {
-        console.error("Error loading from Firestore:", error);
+        console.error("❌ Exception loading from Supabase:", error);
+        console.error("   Falling back to Firebase. Check browser console for details.");
         // On error during initial load, use defaultRooms as fallback
-        // This only happens if Firestore is completely unavailable
         const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
         setRooms(migratedRooms);
       }
       isInitialLoad.current = false;
     };
 
-    loadFromFirestoreOnce();
+    loadFromSupabaseOnce();
 
-    // Set up real-time listener - Firestore is the ONLY data feed to UI
-    // This listener is the single source of truth for all room updates
-    const unsubscribe = onSnapshot(roomsDoc, 
-      (snapshot) => {
-        // Skip during initial load to prevent double-loading
-        if (isInitialLoad.current) {
-          console.log("⏸️ Skipping real-time update during initial load");
-          return;
-        }
-        
-        // Skip during PDF upload to prevent overwriting bulk updates
-        // But only skip if we're actually uploading (not just if flag was set)
-        if (isUploadingPDF.current) {
-          console.log("⏸️ Skipping real-time update during PDF upload");
-          return;
-        }
-        
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          
-          if (data.rooms && Array.isArray(data.rooms)) {
-            // Firestore is the source of truth - always accept updates
-            const migratedRooms = migrateMovedOutToCheckedOut(data.rooms);
-            
-            // Always update state from Firestore to ensure real-time sync across all devices
-            // Firestore is the source of truth - always accept its updates
-            // Create a new array reference to ensure React detects the change and triggers re-render
-            const updatedBy = data.updatedBy || "unknown";
-            const lastUpdated = data.lastUpdated || "";
-            
-            console.log(`✅ Real-time sync: Received update from Firestore - ${migratedRooms.length} rooms (updated by: ${updatedBy}, timestamp: ${lastUpdated})`);
-            
-            // Always update state - Firestore is the source of truth
-            // Use spread operator to create new array reference, ensuring React detects change
-            setRooms([...migratedRooms]);
-            
-            // Update localStorage as read-only backup (don't use it to overwrite Firestore)
-            try {
-              localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
-            } catch (error) {
-              console.error("Error saving to localStorage:", error);
-            }
-            
-            console.log(`✅ Real-time sync: State updated from Firestore - ${migratedRooms.length} rooms`);
-          } else {
-            console.warn("⚠️ Firestore data exists but rooms array is missing or invalid");
+    // Set up real-time subscription - Supabase is the ONLY data feed to UI
+    // This subscription is the single source of truth for all room updates
+    const channel = supabase
+      .channel('roomstatus_rooms_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'roomstatus_rooms'
+        },
+        (payload) => {
+          // Skip during initial load to prevent double-loading
+          if (isInitialLoad.current) {
+            console.log("⏸️ Skipping real-time update during initial load");
+            return;
           }
-        } else {
-          console.warn("⚠️ Firestore document does not exist");
-        }
-      },
-      (error) => {
-        console.error("❌ Error listening to Firestore:", error);
-        console.error("Error details:", {
-          code: error.code,
-          message: error.message
-        });
-        // DO NOT reset rooms on error - keep current state intact
-        // The listener will automatically retry on reconnection
-      }
-    );
+          
+          // Skip during PDF upload to prevent overwriting bulk updates
+          if (isUploadingPDF.current) {
+            console.log("⏸️ Skipping real-time update during PDF upload");
+            return;
+          }
 
-    return () => unsubscribe();
+          console.log("Room updated from Supabase", payload.eventType, payload.new || payload.old);
+
+          // Reload all rooms from Supabase to get latest state (last write wins)
+          supabase
+            .from('roomstatus_rooms')
+            .select('*')
+            .order('room_number', { ascending: true })
+            .then(({ data: rows, error }) => {
+              if (error) {
+                console.error("❌ Error reloading rooms from Supabase:", error);
+                return;
+              }
+              
+              if (rows && rows.length > 0) {
+                const roomsArray = rowsToRooms(rows);
+                const migratedRooms = migrateMovedOutToCheckedOut(roomsArray);
+                
+                // Always update state - Supabase is the source of truth
+                setRooms([...migratedRooms]);
+                
+                // Update localStorage as read-only backup
+                try {
+                  localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
+                } catch (error) {
+                  console.error("Error saving to localStorage:", error);
+                }
+                
+                console.log(`✅ Real-time sync: State updated from Supabase - ${migratedRooms.length} rooms`);
+              }
+            });
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("Realtime connected");
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error("❌ Error subscribing to Supabase realtime");
+          console.error("   Check that Realtime is enabled for 'roomstatus_rooms' table in Supabase Dashboard");
+        } else {
+          console.log(`🔄 Supabase realtime status: ${status}`);
+        }
+      });
+
+    return () => {
+      channel.unsubscribe();
+    };
   }, []); // Empty dependency array - only run once on mount
 
   // Fix rooms 301 and 316 type to D6 if they're wrong (migration)

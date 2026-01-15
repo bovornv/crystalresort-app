@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "@fontsource/noto-sans-thai": "^5.2.8",
+    "@supabase/supabase-js": "^2.90.1",
     "autoprefixer": "^10.4.21",
     "firebase": "^12.5.0",
     "framer-motion": "^12.23.26",
