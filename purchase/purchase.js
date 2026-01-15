@@ -143,43 +143,31 @@ async function saveItemToSupabase(item) {
             console.log('No authenticated user, saving without user ID');
         }
         
-        // CRITICAL: Ensure item.name exists - fetch existing item if name is missing
-        let itemName = item.name;
-        if (!itemName || itemName.trim() === '') {
-            console.warn('⚠️ Item name missing, fetching existing item from database:', item.id);
-            try {
-                const { data: existingItem, error: fetchError } = await supabaseClientInstance
-                    .from('purchase_items')
-                    .select('item_name')
-                    .eq('id', item.id)
-                    .single();
-                
-                if (!fetchError && existingItem?.item_name) {
-                    itemName = existingItem.item_name;
-                    item.name = itemName; // Update local item too
-                    console.log('✅ Restored item name from database:', itemName);
-                } else {
-                    console.error('❌ Could not fetch existing item name:', fetchError);
-                    // If we can't get the name, skip this save to avoid blanking it
-                    return false;
-                }
-            } catch (fetchErr) {
-                console.error('❌ Error fetching existing item:', fetchErr);
-                return false;
-            }
-        }
+        // CRITICAL: Only include item_name if it's valid (not empty, not fallback)
+        // If name is invalid, skip it entirely to preserve existing database value (partial update)
+        const itemName = item.name;
+        const isValidName = itemName && 
+                           itemName.trim() !== '' && 
+                           itemName !== 'Unknown Item' &&
+                           !itemName.startsWith('Unknown');
         
-        // Build itemData - always include essential fields
+        // Build itemData - only include fields that should be updated
         // Map JavaScript property names to database column names
         const itemData = {
             id: item.id,
-            item_name: itemName, // Always include name to prevent blanking
             quantity: item.quantity || 0,
             unit: item.unit || '',
             supplier: item.supplier || '',
             status: item.status,
             updated_at: new Date().toISOString()
         };
+        
+        // Only include item_name if it's valid - otherwise let database keep existing value
+        if (isValidName) {
+            itemData.item_name = itemName;
+        } else {
+            console.warn('⚠️ Skipping item_name in update (invalid or empty):', item.id);
+        }
         
         // Add optional columns only if they have values (to avoid schema errors)
         if (item.requested_qty !== undefined || item.quantity !== undefined) {
@@ -208,27 +196,32 @@ async function saveItemToSupabase(item) {
         
         console.log('💾 Saving item to Supabase:', {
             id: item.id,
-            name: itemName,
+            name: isValidName ? itemName : '(preserving existing)',
             status: item.status,
-            hasUser: !!user
+            hasUser: !!user,
+            includingName: isValidName
         });
         
-        // Try upsert with all columns first
+        // Use PATCH-like behavior: only update fields that are included
+        // Supabase upsert with onConflict will merge, not replace
         let { data, error } = await supabaseClientInstance
             .from('purchase_items')
             .upsert(itemData, { onConflict: 'id' });
         
-        // If error is about missing columns, try again with minimal columns (but always include name)
+        // If error is about missing columns, try again with minimal columns (never include invalid name)
         if (error && error.code === 'PGRST204') {
             console.warn('⚠️ Column missing error, retrying with minimal columns:', error.message);
             const minimalData = {
                 id: item.id,
-                item_name: itemName, // Always include name
                 quantity: item.quantity || 0,
                 unit: item.unit || '',
                 supplier: item.supplier || '',
                 status: item.status
             };
+            // Only add name if valid
+            if (isValidName) {
+                minimalData.item_name = itemName;
+            }
             const retryResult = await supabaseClientInstance
                 .from('purchase_items')
                 .upsert(minimalData, { onConflict: 'id' });
@@ -582,35 +575,61 @@ function setupRealtimeSubscriptions() {
                     const updatedItem = migrateItemToV2(payload.new);
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
-                        // CRITICAL: Merge update with existing item to preserve name if missing or empty
+                        // CRITICAL: Treat as partial update - never overwrite valid name with invalid one
                         const existingItem = items[index];
-                        // Check for empty string or missing name (empty string is truthy but invalid)
-                        const hasValidName = updatedItem.name && updatedItem.name.trim() !== '';
-                        const existingHasValidName = existingItem.name && existingItem.name.trim() !== '';
                         
-                        if (!hasValidName && existingHasValidName) {
-                            updatedItem.name = existingItem.name;
-                            console.log('⚠️ Restored item name from local cache:', existingItem.name);
-                        } else if (!hasValidName && !existingHasValidName) {
-                            // Both are invalid - try to fetch from database
-                            console.warn('⚠️ Item missing name in both local and update, attempting to fetch:', updatedItem.id);
+                        // Validate name from update (reject empty strings, fallbacks, etc.)
+                        const updateHasValidName = updatedItem.name && 
+                                                  updatedItem.name.trim() !== '' && 
+                                                  updatedItem.name !== 'Unknown Item' &&
+                                                  !updatedItem.name.startsWith('Unknown');
+                        
+                        // Validate existing name
+                        const existingHasValidName = existingItem.name && 
+                                                    existingItem.name.trim() !== '' && 
+                                                    existingItem.name !== 'Unknown Item' &&
+                                                    !existingItem.name.startsWith('Unknown');
+                        
+                        // CRITICAL: Only use update name if it's valid, otherwise preserve existing
+                        let finalName = existingItem.name; // Default to existing
+                        if (updateHasValidName) {
+                            finalName = updatedItem.name; // Use update if valid
+                        } else if (!existingHasValidName && updateHasValidName) {
+                            finalName = updatedItem.name; // Use update if existing is invalid but update is valid
+                        } else if (!existingHasValidName && !updateHasValidName) {
+                            // Both invalid - keep existing to avoid overwriting with 'Unknown Item'
+                            console.warn('⚠️ Both names invalid, preserving existing:', updatedItem.id);
                         }
                         
-                        const finalName = (hasValidName ? updatedItem.name : existingItem.name) || 'Unknown Item';
-                        console.log('📝 Updating existing item:', finalName);
+                        console.log('📝 Updating existing item:', {
+                            id: updatedItem.id,
+                            updateName: updatedItem.name,
+                            existingName: existingItem.name,
+                            finalName: finalName,
+                            usingUpdateName: updateHasValidName
+                        });
                         
                         // Merge: preserve local-only fields, update with database fields
+                        // CRITICAL: Never overwrite name unless update has valid name
                         items[index] = {
                             ...existingItem,
                             ...updatedItem,
-                            name: finalName, // Always use valid name
+                            name: finalName, // Use preserved/valid name
                             // Preserve local-only fields that might not be in DB
                             history: existingItem.history || updatedItem.history,
                             statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps
                         };
                     } else {
-                        console.log('➕ Adding new item:', updatedItem.name || 'Unknown Item');
-                        items.push(updatedItem);
+                        // New item - only add if it has a valid name
+                        const hasValidName = updatedItem.name && 
+                                           updatedItem.name.trim() !== '' && 
+                                           updatedItem.name !== 'Unknown Item';
+                        if (hasValidName) {
+                            console.log('➕ Adding new item:', updatedItem.name);
+                            items.push(updatedItem);
+                        } else {
+                            console.warn('⚠️ Skipping new item with invalid name:', updatedItem.id);
+                        }
                     }
                     renderBoard();
                     updatePresenceIndicator();
@@ -1965,28 +1984,30 @@ async function loadData() {
 // Migrate item to v2 data model
 function migrateItemToV2(item) {
     // Map snake_case database columns to camelCase JavaScript properties
-    // Map item_name (database) to name (JavaScript) - CRITICAL: Always preserve name
+    // Map item_name (database) to name (JavaScript)
+    // CRITICAL: Never use fallbacks - preserve existing name or use DB name if valid
     const dbName = item.item_name;
     const existingName = item.name;
     
-    // Determine the best name to use
-    let finalName = null;
+    // Validate names (reject empty strings and fallback values)
+    const dbNameValid = dbName && dbName.trim() !== '' && dbName !== 'Unknown Item' && !dbName.startsWith('Unknown');
+    const existingNameValid = existingName && existingName.trim() !== '' && existingName !== 'Unknown Item' && !existingName.startsWith('Unknown');
     
-    // Prefer existing name if it's valid (not empty)
-    if (existingName && existingName.trim() !== '') {
-        finalName = existingName;
+    // Determine the best name to use - prefer existing, then DB, but never fallback
+    if (existingNameValid) {
+        // Keep existing name if valid
+        item.name = existingName;
+    } else if (dbNameValid) {
+        // Use DB name if existing is invalid but DB is valid
+        item.name = dbName;
+    } else {
+        // Both invalid - keep existing (even if invalid) to avoid overwriting with fallback
+        // This prevents overwriting valid names elsewhere with 'Unknown Item'
+        item.name = existingName || dbName || ''; // Empty string is better than 'Unknown Item'
+        if (!existingNameValid && !dbNameValid) {
+            console.warn('⚠️ Item has invalid name, preserving as-is (no fallback):', item.id);
+        }
     }
-    // Otherwise use item_name from DB if it's valid
-    else if (dbName && dbName.trim() !== '') {
-        finalName = dbName;
-    }
-    // If both are empty/invalid, use fallback
-    else {
-        finalName = 'Unknown Item';
-        console.warn('⚠️ Item missing name, using fallback:', item.id);
-    }
-    
-    item.name = finalName;
     
     // Map issue_reason (database) to issueReason (JavaScript)
     if (item.issue_reason !== undefined && item.issueReason === undefined) {
