@@ -13,17 +13,11 @@ let supabaseClientInstance = null;
 
 // Function to initialize Supabase client (called after script loads)
 function initializeSupabaseClient() {
-    console.log('🚀 Initializing Supabase client...');
-    console.log('📋 SUPABASE_URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET');
-    console.log('📋 SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.substring(0, 20) + '...' : 'NOT SET');
     // Check for both 'supabase' (CDN global) and 'supabaseClient' (module)
     const supabaseLib = typeof supabase !== 'undefined' ? supabase : (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
-    console.log('📋 supabase available:', typeof supabase !== 'undefined');
-    console.log('📋 supabaseClient available:', typeof supabaseClient !== 'undefined');
     
     // Wait for Supabase script to load
     if (!supabaseLib) {
-        console.warn('⚠️ Supabase script not loaded yet, waiting...');
         // Try again after a short delay (max 50 retries = 5 seconds)
         if (!window.supabaseInitRetries) window.supabaseInitRetries = 0;
         if (window.supabaseInitRetries < 50) {
@@ -40,20 +34,10 @@ function initializeSupabaseClient() {
             SUPABASE_URL.startsWith('https://') && 
             SUPABASE_ANON_KEY.startsWith('eyJ')) {
             supabaseClientInstance = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            console.log('✅ Supabase client created successfully');
             window.supabaseInitRetries = 0; // Reset retry counter on success
-        } else {
-            console.warn('⚠️ Supabase client NOT created. Reasons:', {
-                hasUrl: !!SUPABASE_URL,
-                urlValid: SUPABASE_URL?.startsWith('https://'),
-                hasKey: !!SUPABASE_ANON_KEY,
-                keyValid: SUPABASE_ANON_KEY?.startsWith('eyJ'),
-                libAvailable: !!supabaseLib
-            });
         }
     } catch (e) {
         console.error('❌ Error creating Supabase client:', e);
-        console.warn('Supabase not configured. Using localStorage fallback.', e);
     }
 }
 
@@ -78,30 +62,12 @@ let currentUser = null;
 let userRole = 'staff'; // 'admin', 'manager', or 'staff'
 let presenceUpdateInterval = null;
 
-// Check if Supabase is configured
+// Check if Supabase is configured (silent check - no logging)
 function checkSupabaseConfig() {
-    const hasClient = !!supabaseClientInstance;
-    const hasUrl = !!SUPABASE_URL;
-    const urlValid = SUPABASE_URL?.startsWith('https://');
-    const hasKey = !!SUPABASE_ANON_KEY;
-    const keyValid = SUPABASE_ANON_KEY?.startsWith('eyJ');
-    
-    console.log('🔍 checkSupabaseConfig():', {
-        hasClient,
-        hasUrl,
-        urlValid,
-        hasKey,
-        keyValid,
-        url: SUPABASE_URL?.substring(0, 30) + '...',
-        keyStart: SUPABASE_ANON_KEY?.substring(0, 20) + '...'
-    });
-    
     if (supabaseClientInstance && SUPABASE_URL && SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ')) {
         useSupabase = true;
         return true;
     }
-    
-    console.warn('❌ Supabase config check failed');
     return false;
 }
 
@@ -124,11 +90,27 @@ async function loadItemsFromSupabase() {
     }
 }
 
-async function saveItemToSupabase(item) {
+// Track last save per item to prevent duplicates
+const lastSaveState = new Map();
+
+async function saveItemToSupabase(item, source = 'user') {
+    // CRITICAL: Skip save if this update came from real-time (prevent echo)
+    if (item._fromRealtime) {
+        return false; // Silent skip - real-time updates should not trigger saves
+    }
+    
     if (!checkSupabaseConfig()) {
-        console.warn('Supabase not configured, skipping save');
         return false;
     }
+    
+    // Debounce: Skip if same item + same status was just saved
+    const saveKey = `${item.id}:${item.status}`;
+    const lastSave = lastSaveState.get(saveKey);
+    const now = Date.now();
+    if (lastSave && (now - lastSave) < 1000) {
+        return false; // Skip duplicate save within 1 second
+    }
+    lastSaveState.set(saveKey, now);
     
     try {
         // Try to get user, but don't fail if not authenticated
@@ -139,8 +121,7 @@ async function saveItemToSupabase(item) {
                 user = authUser;
             }
         } catch (authErr) {
-            // User not authenticated - that's okay, we'll save without user ID
-            console.log('No authenticated user, saving without user ID');
+            // User not authenticated - that's okay
         }
         
         // CRITICAL: item_name is NOT NULL - must always be included in UPSERT
@@ -151,9 +132,11 @@ async function saveItemToSupabase(item) {
                            itemName !== 'Unknown Item' &&
                            !itemName.startsWith('Unknown');
         
-        // If name is invalid, fetch existing value from database
+        // If name is invalid, fetch existing value from database (log once only)
         if (!isValidName) {
-            console.warn('⚠️ Item name invalid, fetching existing from database:', item.id);
+            const nameFetchKey = `name_fetch_${item.id}`;
+            if (!lastSaveState.has(nameFetchKey)) {
+                lastSaveState.set(nameFetchKey, true);
             try {
                 const { data: existingItem, error: fetchError } = await supabaseClientInstance
                     .from('purchase_items')
@@ -214,14 +197,6 @@ async function saveItemToSupabase(item) {
             itemData.created_by = user.id;
         }
         
-        console.log('💾 Saving item to Supabase:', {
-            id: item.id,
-            name: itemName,
-            status: item.status,
-            hasUser: !!user,
-            nameSource: isValidName ? 'local' : 'database'
-        });
-        
         // UPSERT with onConflict - must include all NOT NULL columns
         let { data, error } = await supabaseClientInstance
             .from('purchase_items')
@@ -229,7 +204,6 @@ async function saveItemToSupabase(item) {
         
         // If error is about missing columns, try again with minimal columns (but ALWAYS include item_name)
         if (error && error.code === 'PGRST204') {
-            console.warn('⚠️ Column missing error, retrying with minimal columns:', error.message);
             const minimalData = {
                 id: item.id,
                 item_name: itemName, // ALWAYS include - NOT NULL constraint
@@ -254,8 +228,6 @@ async function saveItemToSupabase(item) {
             throw error;
         }
         
-        console.log('✅ Item saved to Supabase successfully');
-        
         // When status changes to 'received', insert snapshot into purchase_history
         if (item.status === 'received') {
             await insertPurchaseHistory(item, user?.id || null);
@@ -264,12 +236,6 @@ async function saveItemToSupabase(item) {
         return true;
     } catch (e) {
         console.error('❌ Error saving item to Supabase:', e);
-        console.error('Error details:', {
-            message: e.message,
-            code: e.code,
-            details: e.details,
-            hint: e.hint
-        });
         return false;
     }
 }
@@ -558,21 +524,9 @@ async function updatePresenceIndicator() {
 
 // Setup real-time subscriptions with improved error handling
 function setupRealtimeSubscriptions() {
-    console.log('🔄 setupRealtimeSubscriptions() called');
-    
     if (!checkSupabaseConfig()) {
-        console.warn('⚠️ Supabase not configured, real-time subscriptions disabled');
-        console.log('Check:', {
-            hasClient: !!supabaseClientInstance,
-            hasUrl: !!SUPABASE_URL,
-            urlValid: SUPABASE_URL?.startsWith('https://'),
-            hasKey: !!SUPABASE_ANON_KEY,
-            keyValid: SUPABASE_ANON_KEY?.startsWith('eyJ')
-        });
         return;
     }
-    
-    console.log('✅ Supabase configured, setting up real-time subscriptions...');
     
     // Clean up existing subscriptions
     realtimeSubscriptions.forEach(sub => {
@@ -600,10 +554,12 @@ function setupRealtimeSubscriptions() {
                 filter: undefined
             },
             async (payload) => {
-                console.log('🔄 Purchase items changed:', payload.eventType, payload.new || payload.old);
-                
+                // Real-time update - update UI only, do NOT trigger saves
                 if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
                     const updatedItem = migrateItemToV2(payload.new);
+                    // Mark as from real-time to prevent echo saves
+                    updatedItem._fromRealtime = true;
+                    
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
                         // CRITICAL: Treat as partial update - never overwrite valid name with invalid one
@@ -627,18 +583,8 @@ function setupRealtimeSubscriptions() {
                             finalName = updatedItem.name; // Use update if valid
                         } else if (!existingHasValidName && updateHasValidName) {
                             finalName = updatedItem.name; // Use update if existing is invalid but update is valid
-                        } else if (!existingHasValidName && !updateHasValidName) {
-                            // Both invalid - keep existing to avoid overwriting with 'Unknown Item'
-                            console.warn('⚠️ Both names invalid, preserving existing:', updatedItem.id);
                         }
-                        
-                        console.log('📝 Updating existing item:', {
-                            id: updatedItem.id,
-                            updateName: updatedItem.name,
-                            existingName: existingItem.name,
-                            finalName: finalName,
-                            usingUpdateName: updateHasValidName
-                        });
+                        // Silent: if both invalid, keep existing (no log)
                         
                         // Merge: preserve local-only fields, update with database fields
                         // CRITICAL: Never overwrite name unless update has valid name
@@ -646,6 +592,7 @@ function setupRealtimeSubscriptions() {
                             ...existingItem,
                             ...updatedItem,
                             name: finalName, // Use preserved/valid name
+                            _fromRealtime: true, // Mark to prevent echo save
                             // Preserve local-only fields that might not be in DB
                             history: existingItem.history || updatedItem.history,
                             statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps
@@ -656,16 +603,12 @@ function setupRealtimeSubscriptions() {
                                            updatedItem.name.trim() !== '' && 
                                            updatedItem.name !== 'Unknown Item';
                         if (hasValidName) {
-                            console.log('➕ Adding new item:', updatedItem.name);
                             items.push(updatedItem);
-                        } else {
-                            console.warn('⚠️ Skipping new item with invalid name:', updatedItem.id);
                         }
                     }
                     renderBoard();
                     updatePresenceIndicator();
                 } else if (payload.eventType === 'DELETE') {
-                    console.log('🗑️ Deleting item:', payload.old?.name || payload.old?.id);
                     items = items.filter(i => i.id !== payload.old.id);
                     renderBoard();
                     updatePresenceIndicator();
@@ -707,8 +650,7 @@ function setupRealtimeSubscriptions() {
                 table: 'purchase_history' 
             },
             (payload) => {
-                console.log('Purchase history changed:', payload.eventType, payload.new || payload.old);
-                
+                // Real-time history update - update UI only (silent)
                 if (payload.eventType === 'INSERT') {
                 const record = {
                     id: payload.new.id,
@@ -1944,25 +1886,17 @@ async function recordPurchase(item, status) {
 
 // Load data from Supabase or localStorage (async)
 async function loadData() {
-    console.log('📦 loadData() called');
-    console.log('🔍 Checking Supabase config...');
-    
     if (checkSupabaseConfig()) {
-        console.log('✅ Supabase config check passed');
         // Try loading from Supabase first
-        console.log('📥 Loading items from Supabase...');
         const supabaseItems = await loadItemsFromSupabase();
         if (supabaseItems !== null) {
-            console.log(`✅ Loaded ${supabaseItems.length} items from Supabase`);
             items = supabaseItems.map(item => migrateItemToV2(item));
         } else {
-            console.warn('⚠️ Failed to load from Supabase, using localStorage');
             // Fallback to localStorage
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 try {
                     items = JSON.parse(stored).map(item => migrateItemToV2(item));
-                    console.log(`📦 Loaded ${items.length} items from localStorage`);
                 } catch (e) {
                     console.error('Error loading data:', e);
                     items = [];
@@ -1991,7 +1925,6 @@ async function loadData() {
         }
         
         // Setup real-time subscriptions
-        console.log('📡 Setting up real-time subscriptions after data load...');
         setupRealtimeSubscriptions();
     } else {
         // Use localStorage fallback (synchronous)
@@ -2012,7 +1945,7 @@ async function loadData() {
     return Promise.resolve();
 }
 
-// Migrate item to v2 data model
+// Migrate item to v2 data model (silent - no logging)
 function migrateItemToV2(item) {
     // Map snake_case database columns to camelCase JavaScript properties
     // Map item_name (database) to name (JavaScript)
@@ -2033,11 +1966,7 @@ function migrateItemToV2(item) {
         item.name = dbName;
     } else {
         // Both invalid - keep existing (even if invalid) to avoid overwriting with fallback
-        // This prevents overwriting valid names elsewhere with 'Unknown Item'
         item.name = existingName || dbName || ''; // Empty string is better than 'Unknown Item'
-        if (!existingNameValid && !dbNameValid) {
-            console.warn('⚠️ Item has invalid name, preserving as-is (no fallback):', item.id);
-        }
     }
     
     // Map issue_reason (database) to issueReason (JavaScript)
@@ -2533,7 +2462,10 @@ async function saveData() {
         // Save all items to Supabase
         try {
             for (const item of items) {
-                await saveItemToSupabase(item);
+                // Skip items from real-time to prevent echo saves
+                if (!item._fromRealtime) {
+                    await saveItemToSupabase(item, 'saveData');
+                }
             }
         } catch (e) {
             console.error('Error saving to Supabase:', e);
@@ -3306,32 +3238,18 @@ async function handleAddItem(event) {
 
     items.push(newItem);
     
-    console.log('✅ Item added:', {
-        id: newItem.id,
-        name: newItem.name,
-        quantity: newItem.quantity,
-        unit: newItem.unit,
-        supplier: newItem.supplier,
-        status: newItem.status,
-        urgency: newItem.urgency,
-        user: currentUser?.nickname || 'Unknown'
-    });
-    
     // Track history
     addItemHistory(newItem.id, `Item created`, currentUser);
     
-    // Save to Supabase if configured
+    // Save to Supabase if configured (single save)
     if (checkSupabaseConfig()) {
-        const saved = await saveItemToSupabase(newItem);
-        if (!saved) {
-            console.warn('⚠️ Failed to save item to Supabase, but item added locally');
-        }
-    } else {
-        console.warn('⚠️ Supabase not configured, item saved to localStorage only');
+        await saveItemToSupabase(newItem, 'user');
     }
     
-    // Save data (fire-and-forget, don't await to avoid blocking UI)
-    saveData().catch(err => console.error('Error saving data:', err));
+    // Save to localStorage (fallback only if Supabase not configured)
+    if (!checkSupabaseConfig()) {
+        saveData().catch(err => console.error('Error saving data:', err));
+    }
     renderBoard();
     closeAddItemModal();
     showNotification(t('itemAddedSuccess'), 'success');
@@ -3432,7 +3350,7 @@ async function handleEditItem(event) {
 
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item);
+        await saveItemToSupabase(item, 'user');
     }
 
     // Save data (fire-and-forget, don't await to avoid blocking UI)
@@ -3533,7 +3451,7 @@ async function quickReceive(itemId) {
     
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item);
+        await saveItemToSupabase(item, 'user');
     }
     
     // Save data (fire-and-forget, don't await to avoid blocking UI)
@@ -3704,7 +3622,7 @@ async function handleQuickIssue(event) {
     
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item);
+        await saveItemToSupabase(item, 'user');
     }
     
     // Save data (fire-and-forget, don't await to avoid blocking UI)
@@ -3763,7 +3681,7 @@ async function handleReceiving(event) {
 
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item);
+        await saveItemToSupabase(item, 'user');
     }
 
     // Save data (fire-and-forget, don't await to avoid blocking UI)
@@ -3795,16 +3713,6 @@ async function moveItem(itemId, newStatus) {
     const now = Date.now();
     item.status = newStatus;
     
-    console.log('🔄 Item moved:', {
-        id: itemId,
-        name: item.name,
-        from: oldStatus,
-        to: newStatus,
-        fromLabel: getColumnLabel(oldStatus),
-        toLabel: getColumnLabel(newStatus),
-        user: currentUser?.nickname || 'Unknown'
-    });
-    
     // Update status timestamps
     if (!item.statusTimestamps) item.statusTimestamps = {};
     item.statusTimestamps[newStatus] = now;
@@ -3817,13 +3725,15 @@ async function moveItem(itemId, newStatus) {
     // Track history
     addItemHistory(itemId, `${t('move')}: ${getColumnLabel(oldStatus)} → ${getColumnLabel(newStatus)}`, currentUser);
     
-    // Save to Supabase if configured
+    // Save to Supabase if configured (single save)
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item);
+        await saveItemToSupabase(item, 'user');
     }
     
-    // Save data (fire-and-forget, don't await to avoid blocking UI)
-    saveData().catch(err => console.error('Error saving data:', err));
+    // Save to localStorage (fallback only if Supabase not configured)
+    if (!checkSupabaseConfig()) {
+        saveData().catch(err => console.error('Error saving data:', err));
+    }
     renderBoard();
     
     // Refresh views if active
