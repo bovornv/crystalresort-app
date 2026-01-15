@@ -221,6 +221,7 @@ const Dashboard = () => {
   // Ref to track initial load to prevent double-loading
   const isInitialLoad = useRef(true);
   const isUploadingPDF = useRef(false);
+  const realtimeReloadTimeout = useRef(null); // Ref for debouncing realtime reloads
   const inhouseFileInputRef = useRef(null); // Ref for inhouse file input
   const departureFileInputRef = useRef(null); // Ref for departure file input
   
@@ -257,7 +258,39 @@ const Dashboard = () => {
     }));
   };
 
+  // Helper function to update a single room in Supabase
+  const updateSingleRoomInSupabase = async (room) => {
+    try {
+      const migratedRoom = migrateMovedOutToCheckedOut([room])[0];
+      const row = roomsToRows([migratedRoom])[0];
+      
+      const { error } = await supabase
+        .from('roomstatus_rooms')
+        .upsert({
+          room_number: row.room_number,
+          type: row.type,
+          floor: row.floor,
+          status: row.status,
+          maid: row.maid,
+          remark: row.remark,
+          cleaned_today: row.cleaned_today,
+          border: row.border,
+          vacant_since: row.vacant_since,
+          was_purple_before_cleaned: row.was_purple_before_cleaned,
+          updated_at: row.updated_at
+        }, {
+          onConflict: 'room_number'
+        });
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating single room in Supabase:", error);
+      throw error;
+    }
+  };
+
   // Helper function to immediately update Supabase (for real-time sync)
+  // Used for bulk updates (e.g., PDF upload, initial sync)
   const updateSupabaseImmediately = async (updatedRooms) => {
     try {
       const migratedRooms = migrateMovedOutToCheckedOut(updatedRooms);
@@ -364,11 +397,14 @@ const Dashboard = () => {
       });
     });
     
-    // Update Supabase immediately for real-time sync
+    // Update Supabase immediately for real-time sync (only the changed room)
     // Wait for Supabase write to complete to ensure sync happens
     try {
-      await updateSupabaseImmediately(updatedRooms);
-      console.log(`✅ Room ${roomNumber} updated and synced to Supabase`);
+      const changedRoom = updatedRooms.find(r => String(r.number) === String(roomNumber));
+      if (changedRoom) {
+        await updateSingleRoomInSupabase(changedRoom);
+        console.log(`✅ Room ${roomNumber} updated and synced to Supabase`);
+      }
     } catch (err) {
       console.error("Error updating room in Supabase:", err);
       // Still update local state even if Supabase fails
@@ -624,36 +660,42 @@ const Dashboard = () => {
             return;
           }
 
-          console.log("Room updated from Supabase", payload.eventType, payload.new || payload.old);
-
-          // Reload all rooms from Supabase to get latest state (last write wins)
-          supabase
-            .from('roomstatus_rooms')
-            .select('*')
-            .order('room_number', { ascending: true })
-            .then(({ data: rows, error }) => {
-              if (error) {
-                console.error("❌ Error reloading rooms from Supabase:", error);
-                return;
-              }
+          // Debounce: Only log and reload once per batch of updates
+          // Use a ref to track pending reload
+          if (!realtimeReloadTimeout.current) {
+            realtimeReloadTimeout.current = setTimeout(() => {
+              realtimeReloadTimeout.current = null;
               
-              if (rows && rows.length > 0) {
-                const roomsArray = rowsToRooms(rows);
-                const migratedRooms = migrateMovedOutToCheckedOut(roomsArray);
-                
-                // Always update state - Supabase is the source of truth
-                setRooms([...migratedRooms]);
-                
-                // Update localStorage as read-only backup
-                try {
-                  localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
-                } catch (error) {
-                  console.error("Error saving to localStorage:", error);
-                }
-                
-                console.log(`✅ Real-time sync: State updated from Supabase - ${migratedRooms.length} rooms`);
-              }
-            });
+              // Reload all rooms from Supabase to get latest state (last write wins)
+              supabase
+                .from('roomstatus_rooms')
+                .select('*')
+                .order('room_number', { ascending: true })
+                .then(({ data: rows, error }) => {
+                  if (error) {
+                    console.error("❌ Error reloading rooms from Supabase:", error);
+                    return;
+                  }
+                  
+                  if (rows && rows.length > 0) {
+                    const roomsArray = rowsToRooms(rows);
+                    const migratedRooms = migrateMovedOutToCheckedOut(roomsArray);
+                    
+                    // Always update state - Supabase is the source of truth
+                    setRooms([...migratedRooms]);
+                    
+                    // Update localStorage as read-only backup
+                    try {
+                      localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
+                    } catch (error) {
+                      console.error("Error saving to localStorage:", error);
+                    }
+                    
+                    console.log(`✅ Real-time sync: State updated from Supabase - ${migratedRooms.length} rooms`);
+                  }
+                });
+            }, 100); // Debounce: wait 100ms for batch of updates
+          }
         }
       )
       .subscribe((status) => {
@@ -669,6 +711,11 @@ const Dashboard = () => {
 
     return () => {
       channel.unsubscribe();
+      // Clear any pending reload timeout
+      if (realtimeReloadTimeout.current) {
+        clearTimeout(realtimeReloadTimeout.current);
+        realtimeReloadTimeout.current = null;
+      }
     };
   }, []); // Empty dependency array - only run once on mount
 
