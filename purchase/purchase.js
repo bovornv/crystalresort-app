@@ -10,30 +10,54 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 // Initialize Supabase client
 // Use a scoped variable name to avoid conflicts with any global supabase variable
 let supabaseClientInstance = null;
-console.log('🚀 Initializing Supabase client...');
-console.log('📋 SUPABASE_URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET');
-console.log('📋 SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.substring(0, 20) + '...' : 'NOT SET');
-console.log('📋 supabaseClient available:', typeof supabaseClient !== 'undefined');
 
-try {
-    if (SUPABASE_URL && SUPABASE_ANON_KEY && 
-        SUPABASE_URL.startsWith('https://') && 
-        SUPABASE_ANON_KEY.startsWith('eyJ') &&
-        typeof supabaseClient !== 'undefined') {
-        supabaseClientInstance = supabaseClient.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('✅ Supabase client created successfully');
-    } else {
-        console.warn('⚠️ Supabase client NOT created. Reasons:', {
-            hasUrl: !!SUPABASE_URL,
-            urlValid: SUPABASE_URL?.startsWith('https://'),
-            hasKey: !!SUPABASE_ANON_KEY,
-            keyValid: SUPABASE_ANON_KEY?.startsWith('eyJ'),
-            clientAvailable: typeof supabaseClient !== 'undefined'
-        });
+// Function to initialize Supabase client (called after script loads)
+function initializeSupabaseClient() {
+    console.log('🚀 Initializing Supabase client...');
+    console.log('📋 SUPABASE_URL:', SUPABASE_URL ? SUPABASE_URL.substring(0, 30) + '...' : 'NOT SET');
+    console.log('📋 SUPABASE_ANON_KEY:', SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.substring(0, 20) + '...' : 'NOT SET');
+    console.log('📋 supabaseClient available:', typeof supabaseClient !== 'undefined');
+    
+    // Wait for Supabase script to load
+    if (typeof supabaseClient === 'undefined') {
+        console.warn('⚠️ Supabase script not loaded yet, waiting...');
+        // Try again after a short delay
+        setTimeout(initializeSupabaseClient, 100);
+        return;
     }
-} catch (e) {
-    console.error('❌ Error creating Supabase client:', e);
-    console.warn('Supabase not configured. Using localStorage fallback.', e);
+    
+    try {
+        if (SUPABASE_URL && SUPABASE_ANON_KEY && 
+            SUPABASE_URL.startsWith('https://') && 
+            SUPABASE_ANON_KEY.startsWith('eyJ') &&
+            typeof supabaseClient !== 'undefined') {
+            supabaseClientInstance = supabaseClient.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log('✅ Supabase client created successfully');
+        } else {
+            console.warn('⚠️ Supabase client NOT created. Reasons:', {
+                hasUrl: !!SUPABASE_URL,
+                urlValid: SUPABASE_URL?.startsWith('https://'),
+                hasKey: !!SUPABASE_ANON_KEY,
+                keyValid: SUPABASE_ANON_KEY?.startsWith('eyJ'),
+                clientAvailable: typeof supabaseClient !== 'undefined'
+            });
+        }
+    } catch (e) {
+        console.error('❌ Error creating Supabase client:', e);
+        console.warn('Supabase not configured. Using localStorage fallback.', e);
+    }
+}
+
+// Initialize immediately if script already loaded, otherwise wait
+if (typeof supabaseClient !== 'undefined') {
+    initializeSupabaseClient();
+} else {
+    // Wait for script to load
+    window.addEventListener('load', function() {
+        setTimeout(initializeSupabaseClient, 100);
+    });
+    // Also try immediately (in case script loads synchronously)
+    setTimeout(initializeSupabaseClient, 100);
 }
 
 // Database sync state
