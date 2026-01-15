@@ -133,40 +133,131 @@ const Dashboard = () => {
     return () => clearInterval(logoutCheckInterval);
   }, []);
 
-  // Load team notes from Firestore on mount and set up real-time listener
+  // Load team notes from Supabase on mount and set up real-time listener
   useEffect(() => {
-    const notesDoc = doc(db, "notes", "today");
-    
-    // Set up real-time listener for team notes
-    const unsubscribe = onSnapshot(notesDoc, (snapshot) => {
-      // Skip update if we're currently saving or if textarea is focused (user is editing)
-      if (isSavingNotes.current || (notesTextareaRef.current && document.activeElement === notesTextareaRef.current)) {
-        return;
-      }
-      
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        setTeamNotes(data.text || "");
-        // Update localStorage as backup
-        try {
-          localStorage.setItem('crystal_team_notes', data.text || "");
-        } catch (error) {
-          console.error("Error saving to localStorage:", error);
-        }
-      } else {
-        // Document doesn't exist, initialize with empty string
-        setTeamNotes("");
-      }
-    }, (error) => {
-      console.error("Error listening to team notes:", error);
-      // Fallback to localStorage if Firestore fails
-      const storedNotes = localStorage.getItem('crystal_team_notes');
-      if (storedNotes) {
-        setTeamNotes(storedNotes);
-      }
-    });
+    // Check if Supabase is configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+    const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+      supabaseUrl !== '' && supabaseAnonKey !== '' &&
+      !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
-    return () => unsubscribe();
+    if (!isSupabaseConfigured) {
+      console.warn('⚠️ Supabase not configured - team notes will use Firebase fallback')
+      // Fallback to Firebase if Supabase not configured
+      const notesDoc = doc(db, "notes", "today");
+      const unsubscribe = onSnapshot(notesDoc, (snapshot) => {
+        if (isSavingNotes.current || (notesTextareaRef.current && document.activeElement === notesTextareaRef.current)) {
+          return;
+        }
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          setTeamNotes(data.text || "");
+          try {
+            localStorage.setItem('crystal_team_notes', data.text || "");
+          } catch (error) {
+            console.error("Error saving to localStorage:", error);
+          }
+        } else {
+          setTeamNotes("");
+        }
+      }, (error) => {
+        console.error("Error listening to team notes:", error);
+        const storedNotes = localStorage.getItem('crystal_team_notes');
+        if (storedNotes) {
+          setTeamNotes(storedNotes);
+        }
+      });
+      return () => unsubscribe();
+    }
+
+    // Load initial team notes from Supabase
+    const loadTeamNotes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('team_notes')
+          .select('*')
+          .eq('id', 'today')
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 means no row found
+          throw error;
+        }
+
+        if (data) {
+          setTeamNotes(data.text || "");
+          // Update localStorage as backup
+          try {
+            localStorage.setItem('crystal_team_notes', data.text || "");
+          } catch (error) {
+            console.error("Error saving to localStorage:", error);
+          }
+        } else {
+          // No data, initialize with empty string
+          setTeamNotes("");
+        }
+      } catch (error) {
+        console.error("Error loading team notes from Supabase:", error);
+        // Fallback to localStorage
+        const storedNotes = localStorage.getItem('crystal_team_notes');
+        if (storedNotes) {
+          setTeamNotes(storedNotes);
+        }
+      }
+    };
+
+    loadTeamNotes();
+
+    // Set up real-time subscription for team notes
+    const channel = supabase
+      .channel('team_notes_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'team_notes',
+          filter: 'id=eq.today'
+        },
+        (payload) => {
+          // Skip update if we're currently saving or if textarea is focused (user is editing)
+          if (isSavingNotes.current || (notesTextareaRef.current && document.activeElement === notesTextareaRef.current)) {
+            return;
+          }
+
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            const newData = payload.new;
+            if (newData && newData.id === 'today') {
+              setTeamNotes(newData.text || "");
+              // Update localStorage as backup
+              try {
+                localStorage.setItem('crystal_team_notes', newData.text || "");
+              } catch (error) {
+                console.error("Error saving to localStorage:", error);
+              }
+              console.log("Team notes updated from Supabase");
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setTeamNotes("");
+            try {
+              localStorage.setItem('crystal_team_notes', "");
+            } catch (error) {
+              console.error("Error saving to localStorage:", error);
+            }
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("Team notes realtime connected");
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error("❌ Error subscribing to team notes realtime");
+        }
+      });
+
+    return () => {
+      channel.unsubscribe();
+    };
   }, []);
 
   // Load common areas from Firestore and set up real-time listener
@@ -1728,12 +1819,37 @@ const Dashboard = () => {
                 
                 try {
                   isSavingNotes.current = true;
-                  const notesDoc = doc(db, "notes", "today");
-                  await setDoc(notesDoc, { 
-                    text: teamNotes,
-                    lastUpdated: serverTimestamp()
-                  }, { merge: true });
-                  console.log("✅ Team notes saved to Firestore");
+                  
+                  // Check if Supabase is configured
+                  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+                  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+                  const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+                    supabaseUrl !== '' && supabaseAnonKey !== '' &&
+                    !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
+
+                  if (isSupabaseConfigured) {
+                    // Save to Supabase
+                    const { error } = await supabase
+                      .from('team_notes')
+                      .upsert({
+                        id: 'today',
+                        text: teamNotes,
+                        updated_by: nickname || 'unknown'
+                      }, {
+                        onConflict: 'id'
+                      });
+
+                    if (error) throw error;
+                    console.log("✅ Team notes saved to Supabase");
+                  } else {
+                    // Fallback to Firebase
+                    const notesDoc = doc(db, "notes", "today");
+                    await setDoc(notesDoc, { 
+                      text: teamNotes,
+                      lastUpdated: serverTimestamp()
+                    }, { merge: true });
+                    console.log("✅ Team notes saved to Firestore (fallback)");
+                  }
                   
                   setTimeout(() => {
                     isSavingNotes.current = false;
