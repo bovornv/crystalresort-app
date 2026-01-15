@@ -4,16 +4,16 @@
 // Supabase Configuration
 // TODO: Replace with your Supabase project URL and anon key
 // Get these from your Supabase project settings: https://app.supabase.com/project/_/settings/api
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+const SUPABASE_URL = 'https://kfyjuzmruutgltpytrqm.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmeWp1em1ydXV0Z2x0cHl0cnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTA1NTIsImV4cCI6MjA4Mzk4NjU1Mn0.ZP3DYdKc5RZiwOJBqim-yiFD_lJH-SxNYXcJtqV8doo';
 
 // Initialize Supabase client
 // Use a scoped variable name to avoid conflicts with any global supabase variable
 let supabaseClientInstance = null;
 try {
     if (SUPABASE_URL && SUPABASE_ANON_KEY && 
-        SUPABASE_URL !== 'YOUR_SUPABASE_URL' && 
-        SUPABASE_ANON_KEY !== 'YOUR_SUPABASE_ANON_KEY' &&
+        SUPABASE_URL.startsWith('https://') && 
+        SUPABASE_ANON_KEY.startsWith('eyJ') &&
         typeof supabaseClient !== 'undefined') {
         supabaseClientInstance = supabaseClient.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     }
@@ -27,9 +27,14 @@ let syncInProgress = false;
 let realtimeSubscriptions = [];
 let useSupabase = false;
 
+// User state
+let currentUser = null;
+let userRole = 'staff'; // 'admin', 'manager', or 'staff'
+let presenceUpdateInterval = null;
+
 // Check if Supabase is configured
 function checkSupabaseConfig() {
-    if (supabaseClientInstance && SUPABASE_URL && SUPABASE_URL !== 'YOUR_SUPABASE_URL') {
+    if (supabaseClientInstance && SUPABASE_URL && SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ')) {
         useSupabase = true;
         return true;
     }
@@ -37,12 +42,13 @@ function checkSupabaseConfig() {
 }
 
 // Supabase Database Functions
+// Load purchase_items from Supabase (active board items)
 async function loadItemsFromSupabase() {
     if (!checkSupabaseConfig()) return null;
     
     try {
         const { data, error } = await supabaseClientInstance
-            .from('items')
+            .from('purchase_items')
             .select('*')
             .order('created_at', { ascending: false });
         
@@ -58,6 +64,7 @@ async function saveItemToSupabase(item) {
     if (!checkSupabaseConfig()) return false;
     
     try {
+        const { data: { user } } = await supabaseClientInstance.auth.getUser();
         const itemData = {
             id: item.id,
             name: item.name,
@@ -70,17 +77,79 @@ async function saveItemToSupabase(item) {
             urgency: item.urgency || 'normal',
             issue_type: item.issue_type || null,
             issueReason: item.issueReason || null,
+            updated_by: user?.id || null,
             updated_at: new Date().toISOString()
         };
         
+        // Only set created_by if this is a new item
+        if (!item.created_by && user) {
+            itemData.created_by = user.id;
+        }
+        
         const { error } = await supabaseClientInstance
-            .from('items')
+            .from('purchase_items')
             .upsert(itemData, { onConflict: 'id' });
+        
+        if (error) throw error;
+        
+        // When status changes to 'received', insert snapshot into purchase_history
+        if (item.status === 'received') {
+            await insertPurchaseHistory(item, user?.id || null);
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('Error saving item to Supabase:', e);
+        return false;
+    }
+}
+
+// Insert immutable snapshot into purchase_history when item is received
+async function insertPurchaseHistory(item, userId) {
+    if (!checkSupabaseConfig()) return false;
+    
+    try {
+        // Check if history record already exists for this item to avoid duplicates
+        // Look for records with same item_id created in the last minute (prevents rapid duplicate saves)
+        const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+        const { data: existing } = await supabaseClientInstance
+            .from('purchase_history')
+            .select('id')
+            .eq('item_id', item.id)
+            .gte('created_at', oneMinuteAgo)
+            .limit(1);
+        
+        // Only insert if no recent record (prevent duplicates from multiple rapid saves)
+        if (existing && existing.length > 0) {
+            return true; // Already recorded recently
+        }
+        
+        const historyData = {
+            id: `history_${item.id}_${Date.now()}`,
+            item_id: item.id,
+            item_name: item.name,
+            supplier: item.supplier,
+            quantity: item.received_qty || item.requested_qty || item.quantity || 0,
+            unit: item.unit,
+            status: item.issue ? 'Issue' : 'OK',
+            receiver: currentUser ? JSON.stringify({
+                nickname: currentUser.nickname || currentUser.email?.split('@')[0] || 'Unknown',
+                email: currentUser.email || null
+            }) : null,
+            issue_type: item.issue_type || null,
+            issue_reason: item.issueReason || null,
+            created_by: userId,
+            created_at: new Date().toISOString()
+        };
+        
+        const { error } = await supabaseClientInstance
+            .from('purchase_history')
+            .insert(historyData);
         
         if (error) throw error;
         return true;
     } catch (e) {
-        console.error('Error saving item to Supabase:', e);
+        console.error('Error inserting purchase history:', e);
         return false;
     }
 }
@@ -90,7 +159,7 @@ async function deleteItemFromSupabase(itemId) {
     
     try {
         const { error } = await supabaseClientInstance
-            .from('items')
+            .from('purchase_items')
             .delete()
             .eq('id', itemId);
         
@@ -107,14 +176,14 @@ async function loadPurchaseRecordsFromSupabase() {
     
     try {
         const { data, error } = await supabaseClientInstance
-            .from('purchase_records')
+            .from('purchase_history')
             .select('*')
-            .order('date', { ascending: false });
+            .order('created_at', { ascending: false });
         
         if (error) throw error;
         return data || [];
     } catch (e) {
-        console.error('Error loading purchase records from Supabase:', e);
+        console.error('Error loading purchase history from Supabase:', e);
         return null;
     }
 }
@@ -123,9 +192,10 @@ async function savePurchaseRecordToSupabase(record) {
     if (!checkSupabaseConfig()) return false;
     
     try {
+        const { data: { user } } = await supabaseClientInstance.auth.getUser();
         const recordData = {
             id: record.id,
-            date: new Date(record.date).toISOString(),
+            item_id: record.itemId || null,
             item_name: record.itemName,
             supplier: record.supplier,
             quantity: record.quantity,
@@ -134,67 +204,166 @@ async function savePurchaseRecordToSupabase(record) {
             receiver: record.receiver ? JSON.stringify(record.receiver) : null,
             issue_type: record.issueType || null,
             issue_reason: record.issueReason || null,
-            item_id: record.itemId || null
+            created_by: user?.id || null,
+            created_at: new Date(record.date).toISOString()
         };
         
         const { error } = await supabaseClientInstance
-            .from('purchase_records')
+            .from('purchase_history')
             .insert(recordData);
         
         if (error) throw error;
         return true;
     } catch (e) {
-        console.error('Error saving purchase record to Supabase:', e);
+        console.error('Error saving purchase history to Supabase:', e);
         return false;
     }
 }
 
-// Setup real-time subscriptions
+// Presence tracking functions
+async function updatePresence() {
+    if (!checkSupabaseConfig() || !currentUser) return;
+    
+    try {
+        const { error } = await supabaseClientInstance
+            .from('presence')
+            .upsert({
+                user_id: currentUser.id,
+                last_seen: new Date().toISOString()
+            }, {
+                onConflict: 'user_id'
+            });
+        
+        if (error) throw error;
+    } catch (e) {
+        console.error('Error updating presence:', e);
+    }
+}
+
+async function getOnlineUsersCount() {
+    if (!checkSupabaseConfig()) return 0;
+    
+    try {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { count, error } = await supabaseClientInstance
+            .from('presence')
+            .select('*', { count: 'exact', head: true })
+            .gte('last_seen', fiveMinutesAgo);
+        
+        if (error) throw error;
+        return count || 0;
+    } catch (e) {
+        console.error('Error getting online users count:', e);
+        return 0;
+    }
+}
+
+function startPresenceTracking() {
+    if (!checkSupabaseConfig() || !currentUser) return;
+    
+    // Update presence immediately
+    updatePresence();
+    
+    // Update presence every 30 seconds
+    if (presenceUpdateInterval) {
+        clearInterval(presenceUpdateInterval);
+    }
+    
+    presenceUpdateInterval = setInterval(() => {
+        updatePresence();
+        updatePresenceIndicator();
+    }, 30000);
+    
+    // Update presence indicator immediately
+    updatePresenceIndicator();
+}
+
+async function updatePresenceIndicator() {
+    // Presence indicator removed - function kept for compatibility but does nothing
+    // const count = await getOnlineUsersCount();
+    // Presence elements removed from UI
+}
+
+// Setup real-time subscriptions with improved error handling
 function setupRealtimeSubscriptions() {
     if (!checkSupabaseConfig()) return;
     
     // Clean up existing subscriptions
     realtimeSubscriptions.forEach(sub => {
+        try {
         supabaseClientInstance.removeChannel(sub);
+        } catch (e) {
+            console.warn('Error removing channel:', e);
+        }
     });
     realtimeSubscriptions = [];
     
-    // Subscribe to items changes
+    // Subscribe to purchase_items changes (realtime updates for active board)
+    // This enables instant updates across all devices when items are added/updated/deleted
     const itemsChannel = supabaseClientInstance
-        .channel('items-changes')
+        .channel('purchase-items-changes', {
+            config: {
+                broadcast: { self: true }
+            }
+        })
         .on('postgres_changes', 
-            { event: '*', schema: 'public', table: 'items' },
-            (payload) => {
-                console.log('Items changed:', payload);
+            { 
+                event: '*', 
+                schema: 'public', 
+                table: 'purchase_items',
+                filter: undefined
+            },
+            async (payload) => {
+                console.log('Purchase items changed:', payload.eventType, payload.new || payload.old);
+                
                 if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-                    // Update local items array
-                    const index = items.findIndex(i => i.id === payload.new.id);
+                    const updatedItem = migrateItemToV2(payload.new);
+                    const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
-                        items[index] = migrateItemToV2(payload.new);
+                        items[index] = updatedItem;
                     } else {
-                        items.push(migrateItemToV2(payload.new));
+                        items.push(updatedItem);
                     }
                     renderBoard();
+                    updatePresenceIndicator();
                 } else if (payload.eventType === 'DELETE') {
                     items = items.filter(i => i.id !== payload.old.id);
                     renderBoard();
+                    updatePresenceIndicator();
                 }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('Subscribed to purchase_items realtime changes');
+            } else if (status === 'CHANNEL_ERROR') {
+                console.error('Error subscribing to purchase_items changes');
+            }
+        });
     
     realtimeSubscriptions.push(itemsChannel);
     
-    // Subscribe to purchase records changes
+    // Subscribe to purchase_history changes (immutable records)
+    // This updates the history view when new records are added
     const purchaseChannel = supabaseClientInstance
-        .channel('purchase-records-changes')
+        .channel('purchase-history-changes', {
+            config: {
+                broadcast: { self: true }
+            }
+        })
         .on('postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'purchase_records' },
+            { 
+                event: '*', 
+                schema: 'public', 
+                table: 'purchase_history' 
+            },
             (payload) => {
-                console.log('Purchase record added:', payload);
+                console.log('Purchase history changed:', payload.eventType, payload.new || payload.old);
+                
+                if (payload.eventType === 'INSERT') {
                 const record = {
                     id: payload.new.id,
-                    date: new Date(payload.new.date).getTime(),
+                        date: new Date(payload.new.created_at).getTime(),
                     itemName: payload.new.item_name,
                     supplier: payload.new.supplier,
                     quantity: payload.new.quantity,
@@ -206,15 +375,47 @@ function setupRealtimeSubscriptions() {
                     itemId: payload.new.item_id
                 };
                 purchaseRecords.push(record);
+                    
                 // Update UI if purchase history modal is open
-                if (document.getElementById('statsModal').classList.contains('active')) {
+                    if (document.getElementById('statsModal')?.classList.contains('active')) {
                     renderStatsDashboard();
                 }
+                    updatePresenceIndicator();
+                } else if (payload.eventType === 'DELETE') {
+                    purchaseRecords = purchaseRecords.filter(r => r.id !== payload.old.id);
+                    if (document.getElementById('statsModal')?.classList.contains('active')) {
+                        renderStatsDashboard();
+                    }
+                    updatePresenceIndicator();
+                }
+            }
+        )
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('Subscribed to purchase_history realtime changes');
+            } else if (status === 'CHANNEL_ERROR') {
+                console.error('Error subscribing to purchase_history changes');
+            }
+        });
+    
+    realtimeSubscriptions.push(purchaseChannel);
+    
+    // Subscribe to presence changes for online users count
+    const presenceChannel = supabaseClientInstance
+        .channel('presence-changes')
+        .on('postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'presence'
+            },
+            () => {
+                updatePresenceIndicator();
             }
         )
         .subscribe();
     
-    realtimeSubscriptions.push(purchaseChannel);
+    realtimeSubscriptions.push(presenceChannel);
 }
 
 // Network status monitoring
@@ -231,45 +432,170 @@ window.addEventListener('offline', () => {
     showNotification('Offline mode - changes will sync when online', 'info');
 });
 
-// Authentication System
-const USER_STORAGE_KEY = 'kitchen_procurement_user';
-let currentUser = null;
-
-// Load user from localStorage
-function loadUser() {
-    const stored = localStorage.getItem(USER_STORAGE_KEY);
+// Authentication System with Supabase Auth
+async function loadUser() {
+    if (!checkSupabaseConfig()) {
+        // Fallback: try localStorage for backward compatibility
+        const stored = localStorage.getItem('kitchen_procurement_user');
     if (stored) {
         try {
-            currentUser = JSON.parse(stored);
+                const userData = JSON.parse(stored);
+                currentUser = { nickname: userData.nickname, email: userData.email || userData.nickname };
+                userRole = 'staff';
             return true;
         } catch (e) {
-            console.error('Error loading user:', e);
-            currentUser = null;
+                console.error('Error loading user from localStorage:', e);
+            }
+        }
             return false;
         }
+    
+    try {
+        const { data: { user }, error } = await supabaseClientInstance.auth.getUser();
+        if (error) throw error;
+        
+        if (user) {
+            currentUser = user;
+            // Load user profile and role
+            const { data: profile } = await supabaseClientInstance
+                .from('users')
+                .select('nickname, role')
+                .eq('id', user.id)
+                .single();
+            
+            if (profile) {
+                userRole = profile.role || 'staff';
+                currentUser.nickname = profile.nickname || user.email?.split('@')[0] || 'User';
+            } else {
+                userRole = 'staff';
+                currentUser.nickname = user.email?.split('@')[0] || 'User';
+            }
+            
+            // Start presence tracking
+            startPresenceTracking();
+            return true;
     }
     return false;
+    } catch (e) {
+        console.error('Error loading user:', e);
+        return false;
+    }
 }
 
-// Save user to localStorage
-function saveUser(nickname) {
-    const user = {
+// Sign up new user
+async function signUp(email, password, nickname, role = 'staff') {
+    if (!checkSupabaseConfig()) {
+        // Fallback to localStorage
+        currentUser = { nickname, email };
+        userRole = role;
+        localStorage.setItem('kitchen_procurement_user', JSON.stringify({ nickname, email, role }));
+        return { success: true };
+    }
+    
+    try {
+        const { data, error } = await supabaseClientInstance.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
         nickname: nickname,
-        loginTime: Date.now()
-    };
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    currentUser = user;
+                    role: role
+                }
+            }
+        });
+        
+        if (error) throw error;
+        
+        if (data.user) {
+            currentUser = data.user;
+            userRole = role;
+            startPresenceTracking();
+            return { success: true, user: data.user };
+        }
+        
+        return { success: false, message: 'Please check your email to confirm your account' };
+    } catch (e) {
+        console.error('Error signing up:', e);
+        return { success: false, message: e.message };
+    }
 }
 
-// Clear user from localStorage
-function clearUser() {
-    localStorage.removeItem(USER_STORAGE_KEY);
+// Sign in user
+async function signIn(email, password) {
+    if (!checkSupabaseConfig()) {
+        // Fallback: simple nickname-based auth
+        currentUser = { nickname: email, email };
+        userRole = 'staff';
+        localStorage.setItem('kitchen_procurement_user', JSON.stringify({ nickname: email, email, role: 'staff' }));
+        return { success: true };
+    }
+    
+    try {
+        const { data, error } = await supabaseClientInstance.auth.signInWithPassword({
+            email,
+            password
+        });
+        
+        if (error) throw error;
+        
+        if (data.user) {
+            currentUser = data.user;
+            
+            // Load user profile and role
+            const { data: profile } = await supabaseClientInstance
+                .from('users')
+                .select('nickname, role')
+                .eq('id', data.user.id)
+                .single();
+            
+            if (profile) {
+                userRole = profile.role || 'staff';
+                currentUser.nickname = profile.nickname || data.user.email?.split('@')[0] || 'User';
+            } else {
+                userRole = 'staff';
+                currentUser.nickname = data.user.email?.split('@')[0] || 'User';
+            }
+            
+            startPresenceTracking();
+            return { success: true, user: data.user };
+        }
+        
+        return { success: false, message: 'Login failed' };
+    } catch (e) {
+        console.error('Error signing in:', e);
+        return { success: false, message: e.message };
+    }
+}
+
+// Sign out user
+async function signOut() {
+    if (presenceUpdateInterval) {
+        clearInterval(presenceUpdateInterval);
+        presenceUpdateInterval = null;
+    }
+    
+    if (checkSupabaseConfig()) {
+        await supabaseClientInstance.auth.signOut();
+    }
+    
     currentUser = null;
+    userRole = 'staff';
+    localStorage.removeItem('kitchen_procurement_user');
 }
 
 // Check if user is logged in
 function isLoggedIn() {
-    return currentUser !== null && currentUser.nickname;
+    return currentUser !== null;
+}
+
+// Check if user has admin/manager role
+function isAdminOrManager() {
+    return userRole === 'admin' || userRole === 'manager';
+}
+
+// Check if user is admin
+function isAdmin() {
+    return userRole === 'admin';
 }
 
 // Get user initials for display
@@ -295,16 +621,26 @@ function closeLoginModal() {
 }
 
 // Handle login form submission
-function handleLogin(event) {
+async function handleLogin(event) {
     event.preventDefault();
-    const nickname = document.getElementById('nicknameInput').value.trim();
+    const nicknameInput = document.getElementById('nicknameInput');
     
+    if (!nicknameInput) {
+        showNotification('Login form not found', 'error');
+        return;
+    }
+    
+    const nickname = nicknameInput.value.trim();
     if (!nickname) {
         showNotification(t('pleaseEnterNickname'), 'error');
         return;
     }
     
-    saveUser(nickname);
+    // Use simple nickname-based auth (localStorage mode)
+    currentUser = { nickname, email: nickname };
+    userRole = 'staff';
+    localStorage.setItem('kitchen_procurement_user', JSON.stringify({ nickname, email: nickname, role: 'staff' }));
+    
     closeLoginModal();
     updateUserUI();
     showAllContent(); // Show app container after login
@@ -324,8 +660,8 @@ function handleLogin(event) {
 }
 
 // Handle logout
-function handleLogout() {
-    clearUser();
+async function handleLogout() {
+    await signOut();
     updateUserUI();
     showNotification(t('logoutSuccess'), 'info');
     hideAllContent();
@@ -341,11 +677,22 @@ function updateUserUI() {
     const currentUserSpan = document.getElementById('currentUser');
     
     if (isLoggedIn()) {
+        const displayName = currentUser.nickname || currentUser.email?.split('@')[0] || 'User';
+        const roleBadge = userRole === 'admin' ? ' [Admin]' : userRole === 'manager' ? ' [Manager]' : '';
+        
         // Show user menu
         if (userMenuContainer) userMenuContainer.style.display = 'flex';
-        if (userMenuName) userMenuName.textContent = currentUser.nickname;
-        if (userMenuNickname) userMenuNickname.textContent = currentUser.nickname;
-        if (currentUserSpan) currentUserSpan.textContent = currentUser.nickname;
+        if (userMenuName) userMenuName.textContent = displayName + roleBadge;
+        // Show full nickname instead of initials
+        if (userMenuNickname) userMenuNickname.textContent = displayName;
+        if (currentUserSpan) currentUserSpan.textContent = displayName;
+        
+        // Show/hide admin-only features
+        const statsBtn = document.querySelector('button[onclick="showStatsModal()"]');
+        const weeklyReviewBtn = document.querySelector('button[onclick="showWeeklyReviewModal()"]');
+        // Make history button visible for all users
+        if (statsBtn) statsBtn.style.display = 'inline-flex';
+        if (weeklyReviewBtn) weeklyReviewBtn.style.display = isAdminOrManager() ? 'inline-flex' : 'none';
         
         // Show app content
         const appContainer = document.querySelector('.app-container');
@@ -1216,7 +1563,8 @@ function savePurchaseRecords() {
 }
 
 // Record a purchase (append-only)
-function recordPurchase(item, status) {
+// Record purchase snapshot in purchase_history (immutable record)
+async function recordPurchase(item, status) {
     const record = {
         id: `purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         date: Date.now(),
@@ -1232,7 +1580,15 @@ function recordPurchase(item, status) {
     };
     
     purchaseRecords.push(record);
+    
+    // Save to Supabase purchase_history table if configured
+    if (checkSupabaseConfig()) {
+        await savePurchaseRecordToSupabase(record);
+    } else {
+        // Fallback to localStorage
     savePurchaseRecords();
+    }
+    
     return record.id; // Return record ID for potential undo
 }
 
@@ -1256,12 +1612,12 @@ async function loadData() {
             }
         }
         
-        // Load purchase records from Supabase
+        // Load purchase history from Supabase
         const supabaseRecords = await loadPurchaseRecordsFromSupabase();
         if (supabaseRecords !== null) {
             purchaseRecords = supabaseRecords.map(record => ({
                 id: record.id,
-                date: new Date(record.date).getTime(),
+                date: new Date(record.created_at).getTime(),
                 itemName: record.item_name,
                 supplier: record.supplier,
                 quantity: record.quantity,
@@ -2751,7 +3107,7 @@ async function quickReceive(itemId) {
     const now = Date.now();
     
     // Record purchase with OK status (quick receive assumes OK quality)
-    const purchaseRecordId = recordPurchase(item, 'OK');
+    const purchaseRecordId = await recordPurchase(item, 'OK');
     
     quickReceiveUndoState = {
         itemId: item.id,
@@ -2953,7 +3309,7 @@ async function handleQuickIssue(event) {
     addItemHistory(item.id, historyNote, currentUser);
     
     // Record purchase with issue status
-    recordPurchase(item, 'Issue');
+    await recordPurchase(item, 'Issue');
     
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
@@ -3018,7 +3374,7 @@ async function handleReceiving(event) {
             item.statusTimestamps['verified'] = now;
         }
         // Record purchase with issue status
-        recordPurchase(item, 'Issue');
+        await recordPurchase(item, 'Issue');
     } else {
         // Quality OK
         if (newReceivedQty >= requestedQty) {
@@ -3031,7 +3387,7 @@ async function handleReceiving(event) {
                 item.statusTimestamps['verified'] = now;
             }
             // Record purchase with OK status
-            recordPurchase(item, 'OK');
+            await recordPurchase(item, 'OK');
         } else {
             // Partial receive - stay in received or move from bought
             if (item.status === 'bought') {
@@ -3108,6 +3464,8 @@ async function moveItem(itemId, newStatus) {
 // Delete item
 async function deleteItem(itemId) {
     if (!requireAuth(() => true)) return;
+    
+    // All logged-in users can delete items
     if (confirm(t('confirmDeleteItem'))) {
         // Delete from Supabase if configured
         if (checkSupabaseConfig()) {
@@ -3596,6 +3954,13 @@ function showStatsModal() {
         showNotification(t('pleaseLogin'), 'error');
         return;
     }
+    
+    // Only admin and manager can view reports
+    if (!isAdminOrManager()) {
+        showNotification('Only administrators and managers can view purchase history', 'error');
+        return;
+    }
+    
     try {
         renderStatsDashboard();
         const modal = document.getElementById('statsModal');
@@ -3622,6 +3987,13 @@ function showWeeklyReviewModal() {
         showNotification(t('pleaseLogin'), 'error');
         return;
     }
+    
+    // Only admin and manager can view reports
+    if (!isAdminOrManager()) {
+        showNotification('Only administrators and managers can view weekly review', 'error');
+        return;
+    }
+    
     try {
         renderWeeklyReview();
         const modal = document.getElementById('weeklyReviewModal');
@@ -5406,27 +5778,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 50);
     
-    // Check authentication
-    const wasLoggedIn = loadUser();
-    if (!wasLoggedIn) {
-        // User not logged in - show login modal and hide content
-        hideAllContent();
-        showLoginModal();
-    } else {
+    // Check authentication (async)
+    loadUser().then((wasLoggedIn) => {
+        if (!wasLoggedIn) {
+            // User not logged in - show login modal and hide content
+            hideAllContent();
+            showLoginModal();
+        } else {
         // User logged in - show content
         updateUserUI();
         showAllContent(); // Ensure app container is visible
-    }
-    
-    updateTodayDate();
-    // Update time every minute
-    setInterval(updateTodayDate, 60000);
     
     // Load data (async - will load from Supabase if configured)
-    if (wasLoggedIn) {
-        showAllContent(); // Ensure app container is visible before loading
-        
-        // Use setTimeout to ensure DOM is fully ready, especially on mobile
         setTimeout(() => {
             loadData().then(() => {
                 loadTemplates();
@@ -5449,6 +5812,22 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }, 100); // Small delay to ensure DOM is ready
     }
+    }).catch((error) => {
+        console.error('Error checking authentication:', error);
+        hideAllContent();
+        showLoginModal();
+    });
+    
+    updateTodayDate();
+    // Update time every minute
+    setInterval(updateTodayDate, 60000);
+    
+    // Update presence indicator periodically
+    setInterval(() => {
+        if (isLoggedIn()) {
+            updatePresenceIndicator();
+        }
+    }, 60000); // Update every minute
     
     // Close user menu when clicking outside
     document.addEventListener('click', function(event) {

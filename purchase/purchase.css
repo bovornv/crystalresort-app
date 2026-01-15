@@ -1,3 +1,6 @@
+/* Import Noto Sans Thai font to match Room Status */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;700&display=swap');
+
 * {
     margin: 0;
     padding: 0;
@@ -5,8 +8,8 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    background-color: #ffffff;
+    font-family: 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background-color: #F6F8FA; /* Match Room Status background */
     color: #37352f;
     overflow-x: auto;
     padding-top: 80px; /* Space for fixed top bar only */
@@ -96,13 +99,27 @@ body {
     font-weight: 700;
     margin: 0;
     margin-bottom: 4px;
-    color: #37352f;
+    color: #15803D; /* Match Room Status primary green */
 }
 
 .top-bar-date {
     font-size: 14px;
-    color: #787774;
+    color: #63738A; /* Match Room Status secondary text color */
     opacity: 1;
+    font-weight: 400;
+}
+
+.presence-indicator {
+    font-size: 13px;
+    color: #63738A; /* Match Room Status secondary text color */
+    margin-top: 4px;
+    font-weight: 400;
+}
+
+.last-updated {
+    font-size: 12px;
+    color: #9ca3af; /* Match Room Status text-gray-400 */
+    margin-top: 2px;
     font-weight: 400;
 }
 
@@ -155,7 +172,8 @@ body {
 
 .user-menu-btn {
     min-width: auto;
-    height: 36px;
+    min-height: 36px;
+    height: auto;
     padding: 6px 12px;
     border-radius: 6px;
     border: 1px solid #e9e9e7;
@@ -164,6 +182,12 @@ body {
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    max-width: none;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -205,6 +229,10 @@ body {
     font-weight: 600;
     color: #37352f;
     margin-bottom: 4px;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
+    max-width: 200px;
 }
 
 .user-menu-label {
@@ -310,22 +338,22 @@ body {
 .login-btn {
     width: 100%;
     padding: 10px 20px;
-    background-color: #238636;
+    background-color: #15803D; /* Match Room Status primary green */
     color: #ffffff;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     font-size: 15px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     transition: background-color 0.15s;
 }
 
 .login-btn:hover {
-    background-color: #1e7530;
+    background-color: #166534; /* Match Room Status hover green */
 }
 
 .login-btn:active {
-    background-color: #196429;
+    background-color: #14532d;
 }
 
 .top-bar-stats {
@@ -366,7 +394,8 @@ body {
 
 .app-container {
     min-height: 100vh;
-    padding: 20px;
+    padding: 16px; /* Match Room Status padding (p-4 = 16px) */
+    background-color: #F6F8FA; /* Match Room Status background */
 }
 
 header {
@@ -441,9 +470,13 @@ header h1 {
     padding: 20px;
     margin-top: 32px;
     border-top: 1px solid #e9e9e7;
-    display: flex;
+    display: flex !important;
     justify-content: center;
     align-items: center;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative;
+    z-index: 10;
 }
 
 .search-container {
@@ -537,31 +570,33 @@ header h1 {
 }
 
 .actions-container {
-    display: flex;
+    display: flex !important;
     gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .action-header-btn {
-    padding: 6px 12px;
-    border: 1px solid #e9e9e7;
+    padding: 8px 16px;
+    border: 1px solid #e5e7eb;
     background-color: #ffffff;
-    border-radius: 3px;
-    font-size: 13px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
+    font-size: 14px;
     font-weight: 500;
-    color: #37352f;
+    color: #374151;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background-color 0.15s;
 }
 
 .action-header-btn:hover {
-    background-color: #f7f6f3;
-    border-color: #d9d9d7;
+    background-color: #f3f4f6; /* Match Room Status hover gray */
+    border-color: #d1d5db;
 }
 
 .action-header-btn.active {
-    background-color: #37352f;
+    background-color: #15803D; /* Match Room Status primary green */
     color: #ffffff;
-    border-color: #37352f;
+    border-color: #15803D;
 }
 
 .search-highlight {
@@ -1326,17 +1361,19 @@ header h1 {
     align-items: center;
     padding: 20px;
     background-color: white;
-    border-radius: 8px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     margin-bottom: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Subtle shadow like Room Status */
+    border: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
     flex-wrap: wrap;
     gap: 15px;
 }
 
 .dashboard-header h2 {
     font-size: 24px;
-    color: #2c3e50;
+    color: #15803D; /* Match Room Status primary green */
     margin: 0;
+    font-weight: 700;
 }
 
 .time-range-selector {
@@ -1346,23 +1383,24 @@ header h1 {
 
 .time-range-btn {
     padding: 8px 16px;
-    border: 1px solid #ddd;
+    border: 1px solid #d1d5db; /* Match Room Status border-gray-300 */
     background-color: white;
-    border-radius: 6px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.15s;
+    color: #374151;
 }
 
 .time-range-btn:hover {
-    background-color: #f0f0f0;
-    border-color: #3498db;
+    background-color: #f3f4f6; /* Match Room Status hover gray */
+    border-color: #9ca3af;
 }
 
 .time-range-btn.active {
-    background-color: #3498db;
+    background-color: #15803D; /* Match Room Status primary green */
     color: white;
-    border-color: #3498db;
+    border-color: #15803D;
 }
 
 .dashboard-grid {
@@ -1374,8 +1412,9 @@ header h1 {
 
 .dashboard-widget {
     background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-radius: 8px; /* Match Room Status rounded-lg */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Subtle shadow like Room Status */
+    border: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
     overflow: hidden;
 }
 
@@ -1385,8 +1424,8 @@ header h1 {
 
 .widget-header {
     padding: 15px 20px;
-    background-color: #f9f9f9;
-    border-bottom: 1px solid #e0e0e0;
+    background-color: #fafafa; /* Match Room Status bg-gray-50 */
+    border-bottom: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1394,13 +1433,13 @@ header h1 {
 
 .widget-header h3 {
     font-size: 16px;
-    color: #2c3e50;
+    color: #374151; /* Match Room Status text-gray-700 */
     margin: 0;
     font-weight: 600;
 }
 
 .widget-badge {
-    background-color: #e74c3c;
+    background-color: #dc2626; /* Match Room Status red-600 */
     color: white;
     padding: 4px 10px;
     border-radius: 12px;
@@ -1415,7 +1454,7 @@ header h1 {
 .widget-stat-large {
     font-size: 48px;
     font-weight: 700;
-    color: #2c3e50;
+    color: #374151; /* Match Room Status text-gray-700 */
     margin-bottom: 10px;
     text-align: center;
 }
@@ -1547,18 +1586,20 @@ header h1 {
 }
 
 .mobile-header {
-    background-color: #2c3e50;
-    color: white;
-    padding: 20px 15px;
+    background-color: white; /* Match Room Status - clean white */
+    color: #374151;
+    padding: 20px 16px;
     position: sticky;
     top: 140px;
     z-index: 100;
+    border-bottom: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
 }
 
 .mobile-header h2 {
     font-size: 24px;
     margin: 0 0 15px 0;
-    font-weight: 600;
+    font-weight: 700;
+    color: #15803D; /* Match Room Status primary green */
 }
 
 .mobile-time-range {
@@ -1570,23 +1611,23 @@ header h1 {
 .mobile-time-btn {
     flex: 1;
     padding: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background-color: rgba(255, 255, 255, 0.1);
-    color: white;
-    border-radius: 6px;
+    border: 1px solid #d1d5db; /* Match Room Status border-gray-300 */
+    background-color: white;
+    color: #374151;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.15s;
 }
 
 .mobile-time-btn:hover {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: #f3f4f6; /* Match Room Status hover gray */
 }
 
 .mobile-time-btn.active {
-    background-color: white;
-    color: #2c3e50;
-    border-color: white;
+    background-color: #15803D; /* Match Room Status primary green */
+    color: white;
+    border-color: #15803D;
 }
 
 .mobile-last-updated {
@@ -1604,21 +1645,22 @@ header h1 {
 }
 
 .mobile-health-card {
-    background-color: #f5f5f5;
-    border-radius: 8px;
+    background-color: white;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     padding: 20px;
     text-align: center;
-    border-left: 4px solid #3498db;
+    border: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
+    border-left: 4px solid #3b82f6; /* Match Room Status blue-500 */
 }
 
 .mobile-health-card.mobile-health-issue {
-    border-left-color: #e74c3c;
-    background-color: #ffeaea;
+    border-left-color: #dc2626; /* Match Room Status red-600 */
+    background-color: #fee2e2; /* Match Room Status red-100 */
 }
 
 .mobile-health-card.mobile-health-urgent {
-    border-left-color: #f39c12;
-    background-color: #fff4e6;
+    border-left-color: #f59e0b; /* Match Room Status amber-500 */
+    background-color: #fef3c7; /* Match Room Status amber-100 */
 }
 
 .mobile-health-card.mobile-health-delayed {
@@ -2020,6 +2062,7 @@ header h1 {
     display: flex;
     gap: 15px;
     overflow-x: auto;
+    padding-top: 20px; /* Add top padding to move columns down */
     padding-bottom: 10px;
     min-height: calc(100vh - 150px);
 }
@@ -2036,45 +2079,40 @@ header h1 {
     border: 1px solid #e9e9e7;
 }
 
-/* Notion-inspired subtle borders */
+/* Column borders - clean and minimal like Room Status */
 .column[data-column="need-to-buy"] {
-    border-left: 3px solid #9b9a97;
+    border-left: 3px solid #9ca3af;
     background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #9ca3af;
 }
 
 .column[data-column="ordered"] {
-    border-left: 3px solid #ff9800;
+    border-left: 3px solid #f59e0b;
     background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #f59e0b;
 }
 
 .column[data-column="bought"] {
-    border-left: 3px solid #9b9a97;
+    border-left: 3px solid #9ca3af;
     background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #9ca3af;
 }
 
 .column[data-column="received"] {
-    border-left: 3px solid #9b9a97;
+    border-left: 3px solid #15803D; /* Match Room Status green */
     background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #15803D;
 }
 
 .column[data-column="verified"] {
-    border-left: 3px solid #9b9a97;
+    border-left: 3px solid #15803D; /* Match Room Status green */
     background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #15803D;
 }
 
 .column-header {
@@ -2082,18 +2120,19 @@ header h1 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0;
-    padding: 12px 15px;
-    background-color: rgba(255, 255, 255, 0.7);
-    border-radius: 6px 6px 0 0;
+    padding: 12px 16px;
+    background-color: #fafafa; /* Match Room Status bg-gray-50 */
+    border-radius: 8px 8px 0 0;
     cursor: pointer;
     user-select: none;
-    transition: background-color 0.2s;
+    transition: background-color 0.15s;
     flex-wrap: wrap;
     gap: 10px;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .column-header:hover {
-    background-color: #f7f6f3;
+    background-color: #f3f4f6; /* Match Room Status hover gray */
 }
 
 .column-header-left {
@@ -2142,16 +2181,16 @@ header h1 {
 }
 
 .column-header h2 {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    color: #2c3e50;
+    color: #374151; /* Match Room Status text-gray-700 */
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
 .item-count {
-    background-color: #3498db;
+    background-color: #15803D; /* Match Room Status primary green */
     color: white;
     padding: 2px 8px;
     border-radius: 12px;
@@ -2160,19 +2199,19 @@ header h1 {
 }
 
 .add-item-btn {
-    background-color: #238636;
+    background-color: #15803D; /* Match Room Status primary green */
     color: #ffffff;
     border: none;
-    padding: 6px 12px;
-    border-radius: 3px;
-    font-size: 13px;
+    padding: 8px 16px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background-color 0.15s;
 }
 
 .add-item-btn:hover {
-    background-color: #1e7530;
+    background-color: #166534; /* Match Room Status hover green */
 }
 
 .add-item-btn:active {
@@ -2188,16 +2227,16 @@ header h1 {
 
 .item-card {
     background-color: white;
-    border-radius: 8px;
-    padding: 10px 16px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-radius: 8px; /* Match Room Status rounded-lg */
+    padding: 12px 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Subtle shadow like Room Status */
+    border: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.15s;
     position: relative;
     max-height: 44px;
     min-height: 44px;
     overflow: hidden;
-    border-bottom: 1px solid #f7f6f3;
 }
 
 .item-card.expanded {
@@ -2207,8 +2246,8 @@ header h1 {
 }
 
 .item-card:hover {
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-color: #d1d5db;
 }
 
 /* Color-coded cards v2 */
@@ -2225,17 +2264,17 @@ header h1 {
 }
 
 .item-card[data-status="received"] {
-    border-left: 4px solid #27ae60;
+    border-left: 4px solid #15803D; /* Match Room Status primary green */
 }
 
 .item-card[data-status="verified"].item-card-ok {
-    border-left: 4px solid #27ae60;
-    background-color: #eafaf1;
+    border-left: 4px solid #15803D; /* Match Room Status primary green */
+    background-color: #dcfce7; /* Match Room Status green-100 */
 }
 
 .item-card.issue {
-    border-left: 4px solid #e74c3c;
-    background-color: #ffeaea;
+    border-left: 4px solid #dc2626; /* Match Room Status red-600 */
+    background-color: #fee2e2; /* Match Room Status red-100 */
 }
 
 .item-card.partial {
@@ -2345,32 +2384,31 @@ header h1 {
     width: 28px;
     height: 28px;
     padding: 0;
-    border: none;
-    background-color: transparent;
+    border: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
+    background-color: white;
     cursor: pointer;
     font-size: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    transition: all 0.15s;
+    border-radius: 6px; /* Match Room Status rounded */
+    transition: background-color 0.15s;
 }
 
 .item-desktop-btn:hover {
-    background-color: #f7f6f3;
+    background-color: #f3f4f6; /* Match Room Status hover gray */
 }
 
 .item-desktop-btn:active {
-    background-color: #edece9;
-    transform: scale(0.95);
+    background-color: #e5e7eb;
 }
 
 .item-desktop-btn.item-edit-btn {
-    color: #238636;
+    color: #15803D; /* Match Room Status primary green */
 }
 
 .item-desktop-btn.item-delete-btn {
-    color: #e74c3c;
+    color: #dc2626; /* Match Room Status red-600 */
 }
 
 .item-actions-row-desktop {
@@ -2392,12 +2430,12 @@ header h1 {
 }
 
 .action-btn-desktop.btn-move-right {
-    background-color: #238636;
+    background-color: #15803D; /* Match Room Status primary green */
     color: white;
 }
 
 .action-btn-desktop.btn-move-right:hover {
-    background-color: #1e7530;
+    background-color: #166534; /* Match Room Status hover green */
 }
 
 .action-btn-desktop.btn-move-right:active {
@@ -2413,42 +2451,40 @@ header h1 {
 }
 
 .quick-receive-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 600;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background-color 0.15s;
     white-space: nowrap;
 }
 
 .quick-receive-btn.quick-receive-ok {
-    background-color: #238636;
+    background-color: #15803D; /* Match Room Status primary green */
     color: white;
 }
 
 .quick-receive-btn.quick-receive-ok:hover {
-    background-color: #1e7530;
+    background-color: #166534; /* Match Room Status hover green */
 }
 
 .quick-receive-btn.quick-receive-ok:active {
-    background-color: #196429;
-    transform: scale(0.98);
+    background-color: #14532d;
 }
 
 .quick-receive-btn.quick-receive-issue {
-    background-color: #e74c3c;
+    background-color: #dc2626; /* Match Room Status red-600 */
     color: white;
 }
 
 .quick-receive-btn.quick-receive-issue:hover {
-    background-color: #c0392b;
+    background-color: #b91c1c; /* Match Room Status red-700 */
 }
 
 .quick-receive-btn.quick-receive-issue:active {
-    background-color: #a93226;
-    transform: scale(0.98);
+    background-color: #991b1b;
 }
 
 /* Fire symbol removed from desktop/tablet - only show on mobile */
@@ -2667,7 +2703,7 @@ header h1 {
     background-color: #c0392b;
 }
 
-/* Modal Styles */
+/* Modal Styles - Match Room Status */
 .modal {
     display: none;
     position: fixed;
@@ -2676,7 +2712,7 @@ header h1 {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0,0,0,0.5);
+    background-color: rgba(0,0,0,0.4); /* Match Room Status bg-black/40 */
     overflow-y: auto;
 }
 
@@ -2707,9 +2743,9 @@ header h1 {
 }
 
 .modal-header h2 {
-    font-size: 18px;
+    font-size: 20px; /* Match Room Status text-xl */
     font-weight: 600;
-    color: #37352f;
+    color: #15803D; /* Match Room Status primary green */
 }
 
 .close-btn {
@@ -2754,7 +2790,7 @@ label {
     margin-bottom: 6px;
     font-size: 14px;
     font-weight: 500;
-    color: #2c3e50;
+    color: #374151; /* Match Room Status text-gray-700 */
 }
 
 input[type="text"],
@@ -2762,11 +2798,12 @@ input[type="number"],
 select,
 textarea {
     width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db; /* Match Room Status border-gray-300 */
+    border-radius: 8px; /* Match Room Status rounded-lg */
     font-size: 14px;
     font-family: inherit;
+    background-color: white;
 }
 
 input[type="text"]:focus,
@@ -2774,8 +2811,8 @@ input[type="number"]:focus,
 select:focus,
 textarea:focus {
     outline: none;
-    border-color: #3498db;
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    border-color: #15803D; /* Match Room Status primary green */
+    box-shadow: 0 0 0 1px #15803D; /* Match Room Status focus ring */
 }
 
 textarea {
@@ -2893,47 +2930,47 @@ textarea {
     justify-content: flex-end;
     margin-top: 20px;
     padding-top: 20px;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
 }
 
 .form-actions button {
     padding: 10px 20px;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.15s;
 }
 
 .form-actions button[type="button"] {
-    background-color: #95a5a6;
-    color: white;
+    background-color: #f3f4f6; /* Match Room Status bg-gray-100 */
+    color: #374151; /* Match Room Status text-gray-700 */
 }
 
 .form-actions button[type="button"]:hover {
-    background-color: #7f8c8d;
+    background-color: #e5e7eb; /* Match Room Status hover gray */
 }
 
 .form-actions button[type="submit"] {
-    background-color: #3498db;
+    background-color: #15803D; /* Match Room Status primary green */
     color: white;
 }
 
 .form-actions button[type="submit"]:hover {
-    background-color: #2980b9;
+    background-color: #166534; /* Match Room Status hover green */
 }
 
-/* Notifications */
+/* Notifications - Match Room Status style */
 .notification {
     position: fixed;
     top: 20px;
     right: 20px;
     padding: 12px 20px;
-    border-radius: 6px;
+    border-radius: 8px; /* Match Room Status rounded-lg */
     font-size: 14px;
     font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); /* Match Room Status shadow-lg */
     z-index: 2000;
     opacity: 0;
     transform: translateX(400px);
@@ -2946,17 +2983,17 @@ textarea {
 }
 
 .notification-success {
-    background-color: #27ae60;
+    background-color: #15803D; /* Match Room Status primary green */
     color: white;
 }
 
 .notification-error {
-    background-color: #e74c3c;
+    background-color: #dc2626; /* Match Room Status red-600 */
     color: white;
 }
 
 .notification-info {
-    background-color: #3498db;
+    background-color: #3b82f6; /* Match Room Status blue-500 */
     color: white;
 }
 
@@ -3216,7 +3253,7 @@ textarea {
     .board-container {
         display: flex !important;
         flex-direction: column !important;
-        padding: 0 !important;
+        padding: 20px 0 0 0 !important; /* Keep top padding to move columns down */
         margin: 0 !important;
         gap: 0;
         overflow-x: visible !important;
@@ -3378,11 +3415,11 @@ textarea {
     }
     
     .item-edit-btn {
-        color: #3498db;
+        color: #15803D; /* Match Room Status primary green */
     }
     
     .item-delete-btn {
-        color: #e74c3c;
+        color: #dc2626; /* Match Room Status red-600 */
     }
     
     /* Urgency badge - subtle, not competing */
@@ -4138,7 +4175,7 @@ textarea {
     gap: 24px;
     margin-bottom: 32px;
     padding-bottom: 24px;
-    border-bottom: 1px solid #e9e9e7;
+    border-bottom: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
 }
 
 .summary-item {
@@ -4149,22 +4186,22 @@ textarea {
 
 .summary-label {
     font-size: 13px;
-    color: #787774;
+    color: #63738A; /* Match Room Status secondary text */
     font-weight: 500;
 }
 
 .summary-value {
     font-size: 24px;
     font-weight: 600;
-    color: #37352f;
+    color: #374151; /* Match Room Status text-gray-700 */
 }
 
 .summary-value.success {
-    color: #0b7f3c;
+    color: #15803D; /* Match Room Status primary green */
 }
 
 .summary-value.error {
-    color: #d1242f;
+    color: #dc2626; /* Match Room Status red-600 */
 }
 
 .analysis-table {
@@ -4178,11 +4215,11 @@ textarea {
 .table-header {
     display: grid;
     grid-template-columns: 0.9fr 2fr 1.2fr 1fr;
-    background-color: #fafafa;
-    border-bottom: 1px solid #e9e9e7;
+    background-color: #fafafa; /* Match Room Status bg-gray-50 */
+    border-bottom: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
     font-weight: 600;
     font-size: 12px;
-    color: #787774;
+    color: #63738A; /* Match Room Status secondary text */
     text-transform: uppercase;
     letter-spacing: 0.3px;
 }
@@ -4190,19 +4227,19 @@ textarea {
 .table-header .table-cell {
     padding: 10px 16px;
     font-size: 12px;
-    color: #787774;
+    color: #63738A; /* Match Room Status secondary text */
     font-weight: 600;
 }
 
 .table-row {
     display: grid;
     grid-template-columns: 0.9fr 2fr 1.2fr 1fr;
-    border-bottom: 1px solid #f7f6f3;
-    transition: background-color 0.1s ease;
+    border-bottom: 1px solid #f3f4f6; /* Match Room Status border-gray-100 */
+    transition: background-color 0.15s ease;
 }
 
 .table-row:hover {
-    background-color: #fafafa;
+    background-color: #f9fafb; /* Match Room Status hover gray */
 }
 
 .table-row:last-child {
@@ -4212,7 +4249,7 @@ textarea {
 .table-cell {
     padding: 12px 16px;
     font-size: 14px;
-    color: #37352f;
+    color: #374151; /* Match Room Status text-gray-700 */
     display: flex;
     align-items: center;
     line-height: 1.5;
@@ -4223,111 +4260,22 @@ textarea {
 
 .status-badge {
     padding: 4px 8px;
-    border-radius: 3px;
+    border-radius: 6px; /* Match Room Status rounded */
     font-size: 12px;
     font-weight: 500;
 }
 
 .status-badge.success {
-    background-color: #e8f5e9;
-    color: #0b7f3c;
+    background-color: #dcfce7; /* Match Room Status green-100 */
+    color: #15803D; /* Match Room Status primary green */
 }
 
 .status-badge.error {
-    background-color: #ffebee;
-    color: #d1242f;
+    background-color: #fee2e2; /* Match Room Status red-100 */
+    color: #dc2626; /* Match Room Status red-600 */
 }
 
-/* Notion-inspired Column Redesign */
-.column {
-    min-width: 420px;
-    max-width: 420px;
-    background-color: #ffffff;
-    border-radius: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    height: fit-content;
-    border: 1px solid #e9e9e7;
-}
-
-.column[data-column="need-to-buy"] {
-    border-left: 3px solid #9b9a97;
-    background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
-}
-
-.column[data-column="ordered"] {
-    border-left: 3px solid #ff9800;
-    background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
-}
-
-.column[data-column="bought"] {
-    border-left: 3px solid #9b9a97;
-    background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
-}
-
-.column[data-column="received"] {
-    border-left: 3px solid #9b9a97;
-    background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
-}
-
-.column[data-column="verified"] {
-    border-left: 3px solid #9b9a97;
-    background-color: #ffffff;
-    border-top: 1px solid #e9e9e7;
-    border-right: 1px solid #e9e9e7;
-    border-bottom: 1px solid #e9e9e7;
-}
-
-.column-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0;
-    padding: 16px;
-    background-color: #ffffff;
-    border-bottom: 1px solid #e9e9e7;
-}
-
-.column-header h2 {
-    font-size: 14px;
-    font-weight: 600;
-    color: #37352f;
-    margin: 0;
-}
-
-.items-container {
-    padding: 8px;
-    min-height: 100px;
-}
-
-/* Notion-inspired Item Card Redesign */
-.item-card {
-    background-color: #ffffff;
-    border: 1px solid #e9e9e7;
-    border-radius: 3px;
-    padding: 12px;
-    margin-bottom: 8px;
-    transition: all 0.15s;
-    cursor: pointer;
-}
-
-.item-card:hover {
-    background-color: #f7f6f3;
-    border-color: #d9d9d7;
-}
+/* Duplicate styles removed - using updated styles defined earlier in file */
 
 .item-name {
     font-size: 15px;
@@ -4368,35 +4316,35 @@ textarea {
 }
 
 .action-btn {
-    padding: 6px 12px;
-    font-size: 13px;
+    padding: 8px 16px;
+    font-size: 14px;
     font-weight: 500;
-    border: 1px solid #e9e9e7;
+    border: 1px solid #e5e7eb; /* Match Room Status border-gray-300 */
     background-color: #ffffff;
-    color: #37352f;
-    border-radius: 3px;
+    color: #374151; /* Match Room Status text-gray-700 */
+    border-radius: 8px; /* Match Room Status rounded-lg */
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background-color 0.15s;
 }
 
 .action-btn:hover {
-    background-color: #f7f6f3;
-    border-color: #d9d9d7;
+    background-color: #f3f4f6; /* Match Room Status hover gray */
+    border-color: #d1d5db;
 }
 
 .action-btn.btn-move-right {
-    background-color: #37352f;
+    background-color: #15803D; /* Match Room Status primary green */
     color: #ffffff;
-    border-color: #37352f;
+    border-color: #15803D;
 }
 
 .action-btn.btn-move-right:hover {
-    background-color: #2e2d2a;
+    background-color: #166534; /* Match Room Status hover green */
 }
 
 .board-container {
-    background-color: #ffffff;
-    padding: 24px;
+    background-color: #F6F8FA; /* Match Room Status background */
+    padding: 16px; /* Match Room Status padding */
     gap: 16px;
 }
 
