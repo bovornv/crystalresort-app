@@ -137,26 +137,24 @@ async function saveItemToSupabase(item, source = 'user') {
             const nameFetchKey = `name_fetch_${item.id}`;
             if (!lastSaveState.has(nameFetchKey)) {
                 lastSaveState.set(nameFetchKey, true);
-            try {
-                const { data: existingItem, error: fetchError } = await supabaseClientInstance
-                    .from('purchase_items')
-                    .select('item_name')
-                    .eq('id', item.id)
-                    .single();
-                
-                if (!fetchError && existingItem?.item_name && existingItem.item_name.trim() !== '') {
-                    itemName = existingItem.item_name;
-                    item.name = itemName; // Update local item too
-                    console.log('✅ Restored item name from database:', itemName);
-                } else {
-                    // If we can't get a valid name, use a safe fallback (but log warning)
+                try {
+                    const { data: existingItem, error: fetchError } = await supabaseClientInstance
+                        .from('purchase_items')
+                        .select('item_name')
+                        .eq('id', item.id)
+                        .single();
+                    
+                    if (!fetchError && existingItem?.item_name && existingItem.item_name.trim() !== '') {
+                        itemName = existingItem.item_name;
+                        item.name = itemName; // Update local item too
+                    } else {
+                        // If we can't get a valid name, use a safe fallback
+                        itemName = itemName || 'Item ' + item.id.substring(0, 8);
+                    }
+                } catch (fetchErr) {
+                    // Use safe fallback if fetch fails
                     itemName = itemName || 'Item ' + item.id.substring(0, 8);
-                    console.warn('⚠️ Could not fetch existing name, using fallback:', itemName);
                 }
-            } catch (fetchErr) {
-                console.error('❌ Error fetching existing item name:', fetchErr);
-                // Use safe fallback if fetch fails
-                itemName = itemName || 'Item ' + item.id.substring(0, 8);
             }
         }
         
