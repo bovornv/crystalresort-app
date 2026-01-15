@@ -302,19 +302,44 @@ async function insertPurchaseHistory(item, userId) {
             quantity: item.received_qty || item.requested_qty || item.quantity || 0,
             unit: item.unit,
             status: item.issue ? 'Issue' : 'OK',
-            receiver: currentUser ? JSON.stringify({
-                nickname: currentUser.nickname || currentUser.email?.split('@')[0] || 'Unknown',
-                email: currentUser.email || null
-            }) : null,
             issue_type: item.issue_type || null,
             issue_reason: item.issueReason || null,
-            created_by: userId,
             created_at: new Date().toISOString()
         };
         
-        const { error } = await supabaseClientInstance
+        // Only include receiver and created_by if columns exist (optional fields)
+        if (currentUser) {
+            // Try to include receiver, but don't fail if column doesn't exist
+            try {
+                historyData.receiver = JSON.stringify({
+                    nickname: currentUser.nickname || currentUser.email?.split('@')[0] || 'Unknown',
+                    email: currentUser.email || null
+                });
+            } catch (e) {
+                // Skip receiver if it causes issues
+            }
+        }
+        if (userId) {
+            historyData.created_by = userId;
+        }
+        
+        let { error } = await supabaseClientInstance
             .from('purchase_history')
             .insert(historyData);
+        
+        // If error is about missing receiver column, retry without it
+        if (error && error.code === 'PGRST204' && error.message?.includes('receiver')) {
+            console.warn('⚠️ receiver column missing, retrying without it');
+            delete historyData.receiver;
+            const retryResult = await supabaseClientInstance
+                .from('purchase_history')
+                .insert(historyData);
+            if (retryResult.error) {
+                console.error('Error inserting purchase history:', retryResult.error);
+                return false;
+            }
+            return true;
+        }
         
         if (error) throw error;
         return true;
@@ -557,24 +582,34 @@ function setupRealtimeSubscriptions() {
                     const updatedItem = migrateItemToV2(payload.new);
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
-                        // CRITICAL: Merge update with existing item to preserve name if missing
+                        // CRITICAL: Merge update with existing item to preserve name if missing or empty
                         const existingItem = items[index];
-                        if (!updatedItem.name && existingItem.name) {
+                        // Check for empty string or missing name (empty string is truthy but invalid)
+                        const hasValidName = updatedItem.name && updatedItem.name.trim() !== '';
+                        const existingHasValidName = existingItem.name && existingItem.name.trim() !== '';
+                        
+                        if (!hasValidName && existingHasValidName) {
                             updatedItem.name = existingItem.name;
                             console.log('⚠️ Restored item name from local cache:', existingItem.name);
+                        } else if (!hasValidName && !existingHasValidName) {
+                            // Both are invalid - try to fetch from database
+                            console.warn('⚠️ Item missing name in both local and update, attempting to fetch:', updatedItem.id);
                         }
-                        console.log('📝 Updating existing item:', updatedItem.name || existingItem.name);
+                        
+                        const finalName = (hasValidName ? updatedItem.name : existingItem.name) || 'Unknown Item';
+                        console.log('📝 Updating existing item:', finalName);
+                        
                         // Merge: preserve local-only fields, update with database fields
                         items[index] = {
                             ...existingItem,
                             ...updatedItem,
-                            name: updatedItem.name || existingItem.name, // Always preserve name
+                            name: finalName, // Always use valid name
                             // Preserve local-only fields that might not be in DB
                             history: existingItem.history || updatedItem.history,
                             statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps
                         };
                     } else {
-                        console.log('➕ Adding new item:', updatedItem.name);
+                        console.log('➕ Adding new item:', updatedItem.name || 'Unknown Item');
                         items.push(updatedItem);
                     }
                     renderBoard();
@@ -1931,17 +1966,27 @@ async function loadData() {
 function migrateItemToV2(item) {
     // Map snake_case database columns to camelCase JavaScript properties
     // Map item_name (database) to name (JavaScript) - CRITICAL: Always preserve name
-    if (item.item_name !== undefined) {
-        // Prefer item_name from DB, but don't overwrite existing name if it exists
-        if (!item.name || item.name.trim() === '') {
-            item.name = item.item_name;
-        }
+    const dbName = item.item_name;
+    const existingName = item.name;
+    
+    // Determine the best name to use
+    let finalName = null;
+    
+    // Prefer existing name if it's valid (not empty)
+    if (existingName && existingName.trim() !== '') {
+        finalName = existingName;
     }
-    // Ensure name exists - if neither name nor item_name exists, use a fallback
-    if (!item.name || item.name.trim() === '') {
-        item.name = item.item_name || 'Unknown Item';
+    // Otherwise use item_name from DB if it's valid
+    else if (dbName && dbName.trim() !== '') {
+        finalName = dbName;
+    }
+    // If both are empty/invalid, use fallback
+    else {
+        finalName = 'Unknown Item';
         console.warn('⚠️ Item missing name, using fallback:', item.id);
     }
+    
+    item.name = finalName;
     
     // Map issue_reason (database) to issueReason (JavaScript)
     if (item.issue_reason !== undefined && item.issueReason === undefined) {
