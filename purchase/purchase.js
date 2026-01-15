@@ -144,9 +144,10 @@ async function saveItemToSupabase(item) {
         }
         
         // Build itemData with only essential columns first
+        // Map JavaScript property names to database column names
         const itemData = {
             id: item.id,
-            name: item.name,
+            item_name: item.name, // Map 'name' to 'item_name' for database
             quantity: item.quantity,
             unit: item.unit,
             supplier: item.supplier,
@@ -196,7 +197,7 @@ async function saveItemToSupabase(item) {
             console.warn('⚠️ Column missing error, retrying with minimal columns:', error.message);
             const minimalData = {
                 id: item.id,
-                name: item.name,
+                item_name: item.name, // Map 'name' to 'item_name' for database
                 quantity: item.quantity,
                 unit: item.unit,
                 supplier: item.supplier,
@@ -360,7 +361,17 @@ async function savePurchaseRecordToSupabase(record) {
     if (!checkSupabaseConfig()) return false;
     
     try {
-        const { data: { user } } = await supabaseClientInstance.auth.getUser();
+        // Try to get user, but don't fail if not authenticated
+        let user = null;
+        try {
+            const { data: { user: authUser }, error: authError } = await supabaseClientInstance.auth.getUser();
+            if (!authError && authUser) {
+                user = authUser;
+            }
+        } catch (authErr) {
+            // User not authenticated - that's okay
+        }
+        
         const recordData = {
             id: record.id,
             item_id: record.itemId || null,
@@ -372,13 +383,31 @@ async function savePurchaseRecordToSupabase(record) {
             receiver: record.receiver ? JSON.stringify(record.receiver) : null,
             issue_type: record.issueType || null,
             issue_reason: record.issueReason || null,
-            created_by: user?.id || null,
             created_at: new Date(record.date).toISOString()
         };
         
-        const { error } = await supabaseClientInstance
+        // Only include created_by if user exists
+        if (user?.id) {
+            recordData.created_by = user.id;
+        }
+        
+        let { error } = await supabaseClientInstance
             .from('purchase_history')
             .insert(recordData);
+        
+        // If error is about missing created_by column, retry without it
+        if (error && error.code === 'PGRST204' && error.message?.includes('created_by')) {
+            console.warn('⚠️ created_by column missing, retrying without it');
+            delete recordData.created_by;
+            const retryResult = await supabaseClientInstance
+                .from('purchase_history')
+                .insert(recordData);
+            if (retryResult.error) {
+                console.error('Error saving purchase history to Supabase:', retryResult.error);
+                return false;
+            }
+            return true;
+        }
         
         if (error) throw error;
         return true;
@@ -1861,6 +1890,12 @@ async function loadData() {
 // Migrate item to v2 data model
 function migrateItemToV2(item) {
     // Map snake_case database columns to camelCase JavaScript properties
+    // Map item_name (database) to name (JavaScript)
+    if (item.item_name !== undefined && item.name === undefined) {
+        item.name = item.item_name;
+    }
+    
+    // Map issue_reason (database) to issueReason (JavaScript)
     if (item.issue_reason !== undefined && item.issueReason === undefined) {
         item.issueReason = item.issue_reason;
     }
