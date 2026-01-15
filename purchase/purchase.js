@@ -2914,6 +2914,17 @@ async function handleAddItem(event) {
 
     items.push(newItem);
     
+    console.log('✅ Item added:', {
+        id: newItem.id,
+        name: newItem.name,
+        quantity: newItem.quantity,
+        unit: newItem.unit,
+        supplier: newItem.supplier,
+        status: newItem.status,
+        urgency: newItem.urgency,
+        user: currentUser?.nickname || 'Unknown'
+    });
+    
     // Track history
     addItemHistory(newItem.id, `Item created`, currentUser);
     
@@ -2991,6 +3002,19 @@ async function handleEditItem(event) {
     item.urgency = document.getElementById('editItemUrgency').checked ? 'urgent' : 'normal';
     item.notes = document.getElementById('editItemNotes').value.trim() || null;
     item.lastUpdated = Date.now();
+
+    console.log('✏️ Item edited:', {
+        id: item.id,
+        name: item.name,
+        oldName: oldName,
+        quantity: item.requested_qty,
+        unit: item.unit,
+        supplier: item.supplier,
+        urgency: item.urgency,
+        oldUrgency: oldUrgency,
+        status: item.status,
+        user: currentUser?.nickname || 'Unknown'
+    });
 
     // Track history for significant changes
     if (oldName !== item.name) {
@@ -3432,6 +3456,16 @@ async function moveItem(itemId, newStatus) {
     const now = Date.now();
     item.status = newStatus;
     
+    console.log('🔄 Item moved:', {
+        id: itemId,
+        name: item.name,
+        from: oldStatus,
+        to: newStatus,
+        fromLabel: getColumnLabel(oldStatus),
+        toLabel: getColumnLabel(newStatus),
+        user: currentUser?.nickname || 'Unknown'
+    });
+    
     // Update status timestamps
     if (!item.statusTimestamps) item.statusTimestamps = {};
     item.statusTimestamps[newStatus] = now;
@@ -3467,6 +3501,14 @@ async function deleteItem(itemId) {
     
     // All logged-in users can delete items
     if (confirm(t('confirmDeleteItem'))) {
+        const item = items.find(i => i.id === itemId);
+        console.log('🗑️ Item deleted:', {
+            id: itemId,
+            name: item?.name || 'Unknown',
+            status: item?.status || 'Unknown',
+            user: currentUser?.nickname || 'Unknown'
+        });
+        
         // Delete from Supabase if configured
         if (checkSupabaseConfig()) {
             await deleteItemFromSupabase(itemId);
@@ -3955,12 +3997,7 @@ function showStatsModal() {
         return;
     }
     
-    // Only admin and manager can view reports
-    if (!isAdminOrManager()) {
-        showNotification('Only administrators and managers can view purchase history', 'error');
-        return;
-    }
-    
+    // All logged-in users can view purchase history
     try {
         renderStatsDashboard();
         const modal = document.getElementById('statsModal');
