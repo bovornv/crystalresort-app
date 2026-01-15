@@ -8,12 +8,16 @@ export default defineConfig(({ command }) => {
   const isDev = command === 'serve'
   
   // Plugin to use index.dev.html for development only
+  // Run BEFORE react() plugin so React plugin can inject preamble into our custom HTML
   const devHtmlPlugin = isDev ? {
     name: 'dev-html-entry',
+    enforce: 'pre', // Run before react plugin
     transformIndexHtml(html) {
       const devHtmlPath = resolve(process.cwd(), 'index.dev.html')
       if (fs.existsSync(devHtmlPath)) {
-        return fs.readFileSync(devHtmlPath, 'utf-8')
+        const devHtml = fs.readFileSync(devHtmlPath, 'utf-8')
+        // Return the HTML string - React plugin will inject preamble after this
+        return devHtml
       }
       return html
     },
@@ -27,7 +31,7 @@ export default defineConfig(({ command }) => {
       emptyOutDir: true,
     },
     plugins: [
-      react(),
+      react(), // React plugin must run first to inject preamble
       ...(devHtmlPlugin ? [devHtmlPlugin] : []),
     ],
     optimizeDeps: {

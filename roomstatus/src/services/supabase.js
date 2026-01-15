@@ -9,18 +9,16 @@ const isSupabaseConfigured = supabaseUrl && supabaseAnonKey &&
   supabaseUrl !== '' && supabaseAnonKey !== '' &&
   !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
-if (!isSupabaseConfigured) {
-  console.error('❌ Supabase environment variables not set or invalid!')
-  console.error('   Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel environment variables')
-  console.error('   Current values:', {
-    url: supabaseUrl || 'MISSING',
-    key: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : 'MISSING'
-  })
-} else {
+if (isSupabaseConfigured) {
   console.log('✅ Supabase environment variables detected')
 }
+// Silently fall back to Firebase if Supabase not configured (expected in localhost)
 
 // Create a single Supabase client instance
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '')
+// Use dummy values if not configured to prevent errors (app will use Firebase fallback)
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key'
+)
 
 export default supabase

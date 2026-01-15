@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import RoomCard from "./RoomCard";
 import CommonAreaCard from "./CommonAreaCard";
 import Footer from "../shared/Footer";
-import AnnouncementBox from "../shared/AnnouncementBox";
 import "../shared/theme.css";
 import "../shared/shared.css";
 import * as pdfjsLib from "pdfjs-dist";
@@ -147,7 +146,7 @@ const Dashboard = () => {
       !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
     if (!isSupabaseConfigured) {
-      console.warn('⚠️ Supabase not configured - team notes will use Firebase fallback')
+      // Silently fall back to Firebase (expected behavior in localhost)
       // Fallback to Firebase if Supabase not configured
       const notesDoc = doc(db, "notes", "today");
       const unsubscribe = onSnapshot(notesDoc, (snapshot) => {
@@ -274,7 +273,7 @@ const Dashboard = () => {
       !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key');
 
     if (!isSupabaseConfigured) {
-      console.warn('⚠️ Supabase not configured - common areas will use Firebase fallback');
+      // Warning already logged by team notes check, skip duplicate
       // Fallback to Firebase if Supabase not configured
       const commonAreasCollection = collection(db, "commonAreas");
       
@@ -751,10 +750,63 @@ const Dashboard = () => {
       !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
     if (!isSupabaseConfigured) {
-      console.error('❌ Supabase not configured - environment variables missing!')
-      console.error('   App will continue using Firebase. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.')
+      // Fall back to Firebase (expected behavior in localhost)
+      console.log('🔄 Loading rooms from Firebase...');
+      
+      // Initialize with default rooms immediately (so UI shows something)
+      const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
+      setRooms(migratedRooms);
       isInitialLoad.current = false;
-      return; // Exit early, Firebase code will handle initialization
+      
+      // Then try to load from Firebase
+      const roomsCollection = collection(db, "rooms");
+      const unsubscribe = onSnapshot(roomsCollection, (snapshot) => {
+        if (snapshot.empty) {
+          // Firestore is empty, initialize with default rooms
+          console.log('📝 Firestore is empty, initializing with default rooms...');
+          const batch = [];
+          migratedRooms.forEach(room => {
+            const roomDoc = doc(roomsCollection, room.number);
+            batch.push(setDoc(roomDoc, removeUndefinedValues({
+              number: room.number,
+              type: room.type,
+              floor: room.floor,
+              status: room.status,
+              maid: room.maid || "",
+              remark: room.remark || "",
+              cleanedToday: room.cleanedToday || false,
+              border: room.border || "black",
+              vacantSince: room.vacantSince || null,
+              wasPurpleBeforeCleaned: room.wasPurpleBeforeCleaned || false,
+            })));
+          });
+          Promise.all(batch).then(() => {
+            console.log(`✅ Initialized Firestore with ${migratedRooms.length} default rooms`);
+          }).catch(err => {
+            console.error("❌ Error initializing Firestore with default rooms:", err);
+          });
+        } else {
+          // Firestore has data, use it
+          console.log(`✅ Loaded ${snapshot.docs.length} rooms from Firestore`);
+          const roomsData = snapshot.docs.map(doc => ({
+            number: doc.id,
+            ...doc.data()
+          }));
+          const migratedRooms = migrateMovedOutToCheckedOut(roomsData);
+          setRooms(migratedRooms);
+          // Update localStorage as backup
+          try {
+            localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
+          } catch (error) {
+            console.error("Error saving to localStorage:", error);
+          }
+        }
+      }, (error) => {
+        console.error("❌ Error listening to rooms:", error);
+        // Keep default rooms that were already set
+      });
+
+      return () => unsubscribe();
     }
 
     console.log('🔄 Attempting to load from Supabase...')
@@ -1717,7 +1769,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#F6F8FA] font-['Noto_Sans_Thai'] flex flex-col">
-      <AnnouncementBox />
       <div className="flex-1 p-4">
         {/* Login Modal */}
         {showLoginModal && (
@@ -1882,9 +1933,9 @@ const Dashboard = () => {
       )}
 
       {/* Page Title & User Menu */}
-      <div className="text-center mb-6 relative">
+      <div className="bg-slate-700 text-white py-4 px-6 mb-6 relative">
         {/* Login/User Pill Button - Top Right */}
-        <div className="absolute top-0 right-0 user-menu-container">
+        <div className="absolute top-4 right-6 user-menu-container">
           {isLoggedIn ? (
             <div className="relative">
               <button
@@ -1925,13 +1976,15 @@ const Dashboard = () => {
           )}
         </div>
         
-        <h1 className="text-2xl font-bold text-[#15803D]">
-          Crystal Resort: Room Status
-        </h1>
-        <div className="flex justify-center items-center gap-2">
-          <p className="text-[#63738A] text-lg">{dateString}</p>
-          <span className="text-[#63738A] text-lg">:</span>
-          <p className="text-[#63738A] text-lg">{timeString}</p>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">
+            Crystal Resort: Room Status
+          </h1>
+          <div className="flex justify-center items-center gap-2">
+            <p className="text-white text-lg">{dateString}</p>
+            <span className="text-white text-lg">:</span>
+            <p className="text-white text-lg">{timeString}</p>
+          </div>
         </div>
       </div>
 
