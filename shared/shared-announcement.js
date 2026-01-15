@@ -114,6 +114,18 @@
       renderAnnouncementBox(true);
     };
 
+    // Convert text to bullet points (split by newlines)
+    const formatBulletPoints = (text) => {
+      if (!text) return '';
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      return lines.map(line => `
+        <div class="shared-announcement-bullet-item">
+          <span class="shared-announcement-bullet">•</span>
+          <span class="shared-announcement-bullet-text">${line.trim()}</span>
+        </div>
+      `).join('');
+    };
+
     box.innerHTML = `
       <div class="shared-announcement-content">
         <div class="shared-announcement-header-row">
@@ -122,7 +134,7 @@
           </div>
         </div>
         <div class="shared-announcement-body">
-          ${announcement.text}
+          ${formatBulletPoints(announcement.text)}
         </div>
         ${announcement.updatedAt ? `
           <div class="shared-announcement-time">
@@ -131,6 +143,12 @@
         ` : ''}
       </div>
     `;
+    
+    // Add edit button
+    const headerRow = box.querySelector('.shared-announcement-header-row');
+    if (headerRow) {
+      headerRow.appendChild(editBtn);
+    }
     
     box.querySelector('.shared-announcement-header-row').appendChild(editBtn);
     return box;
@@ -163,6 +181,18 @@
   }
 
   function init() {
+    // Only show announcement box on main page
+    const currentPath = window.location.pathname;
+    const isMainPage = currentPath === '/' || 
+                      currentPath === '/dashboard/' || 
+                      currentPath === '/dashboard' ||
+                      currentPath === '/dashboard/index.html' ||
+                      currentPath.indexOf('/dashboard') === 0;
+    
+    if (!isMainPage) {
+      return; // Don't render announcement box on other pages
+    }
+
     renderAnnouncementBox();
 
     // Listen for updates

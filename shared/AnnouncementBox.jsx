@@ -1,9 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const AnnouncementBox = () => {
+  const location = useLocation();
   const [announcement, setAnnouncement] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
+
+  // Only show announcement box on main page
+  const currentPath = window.location.pathname;
+  const isMainPage = currentPath === '/' || 
+                    currentPath === '/dashboard/' || 
+                    currentPath === '/dashboard' ||
+                    currentPath === '/dashboard/index.html' ||
+                    currentPath.indexOf('/dashboard') === 0;
+  
+  if (!isMainPage) {
+    return null;
+  }
 
   useEffect(() => {
     // Load announcement from localStorage or API
@@ -132,6 +146,18 @@ const AnnouncementBox = () => {
     );
   }
 
+  // Convert text to bullet points (split by newlines)
+  const formatBulletPoints = (text) => {
+    if (!text) return '';
+    const lines = text.split('\n').filter(line => line.trim() !== '');
+    return lines.map((line, index) => (
+      <div key={index} className="shared-announcement-bullet-item">
+        <span className="shared-announcement-bullet">•</span>
+        <span className="shared-announcement-bullet-text">{line.trim()}</span>
+      </div>
+    ));
+  };
+
   return (
     <div className="shared-announcement-box">
       <div className="shared-announcement-content">
@@ -148,7 +174,7 @@ const AnnouncementBox = () => {
           </button>
         </div>
         <div className="shared-announcement-body">
-          {announcement.text}
+          {formatBulletPoints(announcement.text)}
         </div>
         {announcement.updatedAt && (
           <div className="shared-announcement-time">

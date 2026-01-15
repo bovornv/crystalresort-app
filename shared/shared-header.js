@@ -7,7 +7,12 @@
     const currentPath = window.location.pathname;
     
     // Only show header on main page
-    const isMainPage = currentPath === '/' || currentPath === '/dashboard/' || currentPath === '/dashboard';
+    // Check for various dashboard paths
+    const isMainPage = currentPath === '/' || 
+                      currentPath === '/dashboard/' || 
+                      currentPath === '/dashboard' ||
+                      currentPath === '/dashboard/index.html' ||
+                      currentPath.indexOf('/dashboard') === 0;
     if (!isMainPage) {
       return null;
     }
@@ -79,7 +84,12 @@
     const footer = createFooter();
     
     if (header) {
-      document.body.insertBefore(header, document.body.firstChild);
+      // Insert header at the very beginning of body
+      if (document.body.firstChild) {
+        document.body.insertBefore(header, document.body.firstChild);
+      } else {
+        document.body.appendChild(header);
+      }
     }
     document.body.appendChild(footer);
   }
@@ -92,11 +102,23 @@
   }
 })();
 
-// Load announcement box script
+// Load announcement box script (only on main page)
 (function() {
   'use strict';
   
   function loadAnnouncement() {
+    // Only load announcement script on main page
+    const currentPath = window.location.pathname;
+    const isMainPage = currentPath === '/' || 
+                      currentPath === '/dashboard/' || 
+                      currentPath === '/dashboard' ||
+                      currentPath === '/dashboard/index.html' ||
+                      currentPath.indexOf('/dashboard') === 0;
+    
+    if (!isMainPage) {
+      return; // Don't load announcement script on other pages
+    }
+
     const script = document.createElement('script');
     script.src = '/shared/shared-announcement.js';
     script.async = true;

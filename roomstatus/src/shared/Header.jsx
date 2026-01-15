@@ -8,7 +8,10 @@ const Header = () => {
 
   // Only show header on main page
   const currentPath = window.location.pathname;
-  const isMainPage = currentPath === '/' || currentPath === '/dashboard/' || currentPath === '/dashboard';
+  const isMainPage = currentPath === '/' || 
+                    currentPath === '/dashboard/' || 
+                    currentPath === '/dashboard' ||
+                    currentPath === '/dashboard/index.html';
   
   if (!isMainPage) {
     return null;
