@@ -181,6 +181,10 @@ async function saveItemToSupabase(item, source = 'user') {
         return false;
     }
     
+    // Skip history insertion during bulk saves (source === 'saveData')
+    // Only insert history when user explicitly changes status to 'received'
+    const skipHistoryInsert = source === 'saveData';
+    
     // Debounce: Skip if same item + same status was just saved
     const saveKey = `${item.id}:${item.status}`;
     const lastSave = lastSaveState.get(saveKey);
@@ -323,8 +327,8 @@ async function saveItemToSupabase(item, source = 'user') {
         
         // When status changes to 'received', insert snapshot into purchase_history
         // Only insert if we haven't already inserted history for this item recently
-        // Skip if status is 'received_temp' (used during bulk save to prevent duplicate inserts)
-        if (item.status === 'received' && item.status !== 'received_temp' && !historyInsertedItems.has(item.id)) {
+        // Skip history insertion during bulk saves (saveData) to prevent excessive requests
+        if (!skipHistoryInsert && item.status === 'received' && !historyInsertedItems.has(item.id)) {
             const inserted = await insertPurchaseHistory(item, user?.id || null);
             if (inserted) {
                 historyInsertedItems.add(item.id);
