@@ -61,10 +61,358 @@ if (document.readyState === 'loading') {
 // Database sync state
 let isOnline = navigator.onLine;
 let syncInProgress = false;
-let realtimeSubscriptions = [];
-let realtimeSubscribed = false; // Track if subscriptions are active
 let useSupabase = false;
-let isReconnecting = false; // Prevent multiple reconnection attempts
+
+// ============================================================================
+// REALTIME MANAGER - SINGLETON PATTERN
+// ============================================================================
+// CRITICAL ARCHITECTURE: Only ONE realtime manager instance exists globally
+// This prevents duplicate channels, websockets, and subscription loops
+// ============================================================================
+
+// Root-cause audit: Where channels are created/subscribed
+// ALLOWED INITIALIZATION PATH (single path only):
+// 1. DOMContentLoaded -> RealtimeManager.start() (if logged in and Supabase configured)
+// 2. Network online -> RealtimeManager.start() (if not already active)
+// 3. Page visibility change -> RealtimeManager.start() (if not already active)
+// 4. Page focus -> RealtimeManager.start() (if not already active)
+// 
+// FORBIDDEN PATHS (must be removed):
+// - After loadData() -> REMOVED
+// - After saving items -> REMOVED
+// - After reconnect logic -> REMOVED (handled by manager internally)
+// - Multiple calls from same event -> PREVENTED by idempotency
+
+const RealtimeManager = (function() {
+    let instance = null;
+    let channels = {
+        items: null,
+        history: null
+    };
+    let isActive = false;
+    let isReconnecting = false;
+    let lastReconnectAttempt = 0;
+    const RECONNECT_COOLDOWN = 10000; // 10 seconds
+    
+    function createManager() {
+        return {
+            start: function() {
+                // Idempotency: if already active, do nothing
+                if (isActive) {
+                    console.log('✅ RealtimeManager: Already active, skipping start');
+                    return true;
+                }
+                
+                // Guard: Must have Supabase client
+                if (!checkSupabaseConfig() || !supabaseClientInstance) {
+                    console.warn('⚠️ RealtimeManager: Cannot start - Supabase not configured');
+                    return false;
+                }
+                
+                // Guard: Prevent reconnection loops
+                const now = Date.now();
+                if (isReconnecting || (now - lastReconnectAttempt) < RECONNECT_COOLDOWN) {
+                    console.log('⏳ RealtimeManager: Reconnection cooldown active, skipping');
+                    return false;
+                }
+                
+                console.log('🔄 RealtimeManager: Starting...');
+                
+                // CRITICAL: Stop any existing channels first
+                this.stop();
+                
+                // Create purchase_items channel (exactly one)
+                try {
+                    channels.items = supabaseClientInstance
+                        .channel('purchase-items', {
+                            config: {
+                                broadcast: { self: true }
+                            }
+                        })
+                        .on('postgres_changes', 
+                            { 
+                                event: '*', 
+                                schema: 'public', 
+                                table: 'purchase_items'
+                                // CRITICAL: No filter - subscribe to ALL changes
+                            },
+                            handleRealtimeUpdate
+                        )
+                        .subscribe((status, err) => {
+                            handleChannelStatus('purchase_items', status, err);
+                        });
+                    
+                    // Create purchase_history channel (exactly one)
+                    channels.history = supabaseClientInstance
+                        .channel('purchase-history', {
+                            config: {
+                                broadcast: { self: true }
+                            }
+                        })
+                        .on('postgres_changes',
+                            { 
+                                event: '*', 
+                                schema: 'public', 
+                                table: 'purchase_history'
+                                // CRITICAL: No filter - subscribe to ALL changes
+                            },
+                            handleRealtimeHistoryUpdate
+                        )
+                        .subscribe((status, err) => {
+                            handleChannelStatus('purchase_history', status, err);
+                        });
+                    
+                    isActive = true;
+                    isReconnecting = false;
+                    console.log('✅ RealtimeManager: Started successfully');
+                    return true;
+                } catch (error) {
+                    console.error('❌ RealtimeManager: Failed to start', error);
+                    this.stop();
+                    return false;
+                }
+            },
+            
+            stop: function() {
+                if (!isActive && !channels.items && !channels.history) {
+                    return; // Already stopped
+                }
+                
+                console.log('🛑 RealtimeManager: Stopping...');
+                
+                // Remove all channels
+                if (channels.items) {
+                    try {
+                        supabaseClientInstance.removeChannel(channels.items);
+                    } catch (e) {
+                        // Silent cleanup
+                    }
+                    channels.items = null;
+                }
+                
+                if (channels.history) {
+                    try {
+                        supabaseClientInstance.removeChannel(channels.history);
+                    } catch (e) {
+                        // Silent cleanup
+                    }
+                    channels.history = null;
+                }
+                
+                isActive = false;
+                isReconnecting = false;
+                console.log('✅ RealtimeManager: Stopped');
+            },
+            
+            reconnect: function() {
+                const now = Date.now();
+                if (isReconnecting || (now - lastReconnectAttempt) < RECONNECT_COOLDOWN) {
+                    return; // Cooldown active
+                }
+                
+                lastReconnectAttempt = now;
+                isReconnecting = true;
+                
+                console.log('🔄 RealtimeManager: Reconnecting...');
+                this.stop();
+                
+                setTimeout(() => {
+                    isReconnecting = false;
+                    if (checkSupabaseConfig() && supabaseClientInstance) {
+                        this.start();
+                    }
+                }, 2000);
+            },
+            
+            isActive: function() {
+                return isActive;
+            }
+        };
+    }
+    
+    return {
+        getInstance: function() {
+            if (!instance) {
+                instance = createManager();
+            }
+            return instance;
+        }
+    };
+})();
+
+// Global reference for easy access
+let realtimeManager = null;
+
+// Realtime update handler - CRITICAL: Only updates UI, never writes back to Supabase
+function handleRealtimeUpdate(payload) {
+    const itemId = payload.new?.id || payload.old?.id;
+    
+    // Clear logging
+    console.log(`🔄 Realtime update received: ${payload.eventType}`, itemId?.substring(0, 8) || 'N/A');
+    
+    // CRITICAL: Only block echo saves (our own writes), NOT cross-device updates
+    if (lastLocalUpdateIds.has(itemId)) {
+        return; // Our own update, skip
+    }
+    
+    if (payload.eventType === 'INSERT') {
+        const newItem = migrateItemToV2(payload.new);
+        newItem._fromRealtime = true;
+        
+        const exists = items.findIndex(i => i.id === newItem.id) >= 0;
+        if (exists) {
+            const index = items.findIndex(i => i.id === newItem.id);
+            items[index] = { ...items[index], ...newItem, _fromRealtime: true };
+        } else {
+            const hasValidName = newItem.name && 
+                               newItem.name.trim() !== '' && 
+                               newItem.name !== 'Unknown Item';
+            if (hasValidName) {
+                items.push(newItem);
+            }
+        }
+        renderBoard();
+    } else if (payload.eventType === 'UPDATE') {
+        const updatedItem = migrateItemToV2(payload.new);
+        updatedItem._fromRealtime = true;
+        
+        const index = items.findIndex(i => i.id === updatedItem.id);
+        if (index >= 0) {
+            const existingItem = items[index];
+            
+            // Validate name
+            const updateHasValidName = updatedItem.name && 
+                                      updatedItem.name.trim() !== '' && 
+                                      updatedItem.name !== 'Unknown Item' &&
+                                      !updatedItem.name.startsWith('Unknown');
+            const existingHasValidName = existingItem.name && 
+                                        existingItem.name.trim() !== '' && 
+                                        existingItem.name !== 'Unknown Item' &&
+                                        !existingItem.name.startsWith('Unknown');
+            
+            let finalName = existingItem.name;
+            if (updateHasValidName) {
+                finalName = updatedItem.name;
+            } else if (!existingHasValidName && updateHasValidName) {
+                finalName = updatedItem.name;
+            }
+            
+            // CRITICAL: Real-time update is source of truth
+            items[index] = {
+                ...existingItem,
+                ...updatedItem,
+                name: finalName,
+                _fromRealtime: true,
+                history: existingItem.history || updatedItem.history,
+                statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps || {}
+            };
+            
+            detectAndUpdateIssueStatus(items[index]);
+            renderBoard();
+            
+            if (currentView === 'dashboard') {
+                renderDashboard();
+            } else if (currentView === 'mobile') {
+                renderMobileView();
+            }
+        } else {
+            const hasValidName = updatedItem.name && 
+                               updatedItem.name.trim() !== '' && 
+                               updatedItem.name !== 'Unknown Item';
+            if (hasValidName) {
+                items.push(updatedItem);
+                renderBoard();
+            }
+        }
+    } else if (payload.eventType === 'DELETE') {
+        const deletedId = payload.old.id;
+        items = items.filter(i => i.id !== deletedId);
+        renderBoard();
+    }
+}
+
+// Realtime history update handler
+function handleRealtimeHistoryUpdate(payload) {
+    if (payload.eventType === 'INSERT') {
+        const record = {
+            id: payload.new.id,
+            date: new Date(payload.new.created_at).getTime(),
+            itemName: payload.new.item_name,
+            supplier: payload.new.supplier,
+            quantity: payload.new.quantity,
+            unit: payload.new.unit,
+            status: payload.new.status,
+            receiver: payload.new.receiver ? JSON.parse(payload.new.receiver) : null,
+            issueType: payload.new.issue_type,
+            issueReason: payload.new.issue_reason,
+            itemId: payload.new.item_id
+        };
+        purchaseRecords.push(record);
+        
+        if (document.getElementById('statsModal')?.classList.contains('active')) {
+            renderStatsDashboard();
+        }
+    } else if (payload.eventType === 'DELETE') {
+        purchaseRecords = purchaseRecords.filter(r => r.id !== payload.old.id);
+        if (document.getElementById('statsModal')?.classList.contains('active')) {
+            renderStatsDashboard();
+        }
+    }
+}
+
+// Channel status handler - CRITICAL: Proper error extraction and handling
+function handleChannelStatus(channelName, status, err) {
+    // Extract error information properly
+    let errorMessage = 'Unknown error';
+    let errorDetails = null;
+    
+    if (err) {
+        if (typeof err === 'string') {
+            errorMessage = err;
+        } else if (err.message) {
+            errorMessage = err.message;
+            errorDetails = err;
+        } else if (err.toString) {
+            errorMessage = err.toString();
+        } else {
+            errorMessage = JSON.stringify(err);
+        }
+    }
+    
+    // Get manager instance
+    const manager = RealtimeManager.getInstance();
+    
+    if (status === 'SUBSCRIBED') {
+        console.log(`✅ Realtime connected: ${channelName}`);
+    } else if (status === 'CLOSED') {
+        console.warn(`⚠️ Realtime CLOSED: ${channelName}`);
+        // Reconnect once, not in a loop (handled by manager's reconnect method)
+        manager.reconnect();
+    } else if (status === 'TIMED_OUT') {
+        console.warn(`⏱️ Realtime TIMED_OUT: ${channelName}`);
+        // Retry subscribe once with backoff
+        setTimeout(() => {
+            manager.reconnect();
+        }, 3000);
+    } else if (status === 'CHANNEL_ERROR') {
+        // CHANNEL_ERROR is fatal - fully tear down and re-init
+        console.error(`❌ Realtime CHANNEL_ERROR: ${channelName}`, errorMessage || 'No error details');
+        if (errorMessage.includes('permission denied')) {
+            console.error('⚠️ RLS Policy Issue: Run FIX_REALTIME_SYNC.sql');
+        }
+        if (errorMessage.includes('publication')) {
+            console.error('⚠️ Real-time Not Enabled: Add tables to supabase_realtime publication');
+        }
+        
+        // Fully tear down and re-init with backoff
+        manager.stop();
+        setTimeout(() => {
+            if (checkSupabaseConfig() && supabaseClientInstance) {
+                manager.reconnect();
+            }
+        }, 5000);
+    }
+}
 
 // Generate unique client ID to prevent feedback loops
 // This ID is used to tag local updates and ignore our own real-time events
@@ -681,338 +1029,49 @@ async function updatePresenceIndicator() {
     // Presence elements removed from UI
 }
 
-// Setup real-time subscriptions - ARCHITECTURE: One subscription per table, device-agnostic, user-agnostic
-// CRITICAL: Must be called BEFORE data load to ensure no updates are missed
-// CRITICAL: Only one subscription per table - cleanup old subscriptions before creating new ones
+// DEPRECATED: setupRealtimeSubscriptions() - Use RealtimeManager.getInstance().start() instead
+// This function is kept for backward compatibility but redirects to RealtimeManager
 function setupRealtimeSubscriptions() {
-    // Guard: Must have Supabase client
-    if (!checkSupabaseConfig() || !supabaseClientInstance) {
-        console.warn('⚠️ Cannot setup realtime: Supabase not configured');
-        return false;
+    if (!realtimeManager) {
+        realtimeManager = RealtimeManager.getInstance();
     }
-    
-    // Guard: Prevent duplicate subscriptions - check if already active
-    const hasActiveSubscriptions = realtimeSubscriptions.length > 0 && 
-        realtimeSubscriptions.some(sub => {
-            try {
-                const state = sub.state;
-                return state === 'joined' || state === 'joining';
-            } catch (e) {
-                return false;
-            }
-        });
-    
-    if (hasActiveSubscriptions && realtimeSubscribed) {
-        console.log('✅ Realtime subscriptions already active');
-        return true; // Already subscribed and active
-    }
-    
-    // Guard: Prevent reconnection loops
-    if (isReconnecting) {
-        console.log('⏳ Reconnection already in progress');
-        return false;
-    }
-    
-    console.log('🔄 Setting up realtime subscriptions...');
-    
-    // CRITICAL: Clean up ALL existing subscriptions first to prevent duplicates
-    realtimeSubscriptions.forEach(sub => {
-        try {
-        supabaseClientInstance.removeChannel(sub);
-        } catch (e) {
-            // Silent cleanup - channel might already be removed
-        }
-    });
-    realtimeSubscriptions = [];
-    realtimeSubscribed = false;
-    
-    // CRITICAL: Use fixed channel name to ensure only one subscription per table
-    // Device-agnostic and user-agnostic - no filtering by user/nickname/device
-    const itemsChannel = supabaseClientInstance
-        .channel('purchase-items', {
-            config: {
-                broadcast: { self: true }
-            }
-        })
-        .on('postgres_changes', 
-            { 
-                event: '*', 
-                schema: 'public', 
-                table: 'purchase_items'
-                // CRITICAL: No filter - subscribe to ALL changes regardless of user/device/nickname
-            },
-            async (payload) => {
-                // Real-time update - ALWAYS accept as source of truth
-                const itemId = payload.new?.id || payload.old?.id;
-                
-                // Minimal logging: table, event type, item ID
-                console.log(`🔄 RT ${payload.eventType}:`, itemId.substring(0, 8));
-                
-                // CRITICAL: Only block echo saves (our own writes), NOT cross-device updates
-                // lastLocalUpdateIds only blocks for 1 second to prevent echo loops
-                // After 1 second, accept ALL updates (including from same device) as source of truth
-                if (lastLocalUpdateIds.has(itemId)) {
-                    // This is likely our own update (within 1 second window)
-                    // Still log but don't process to prevent echo loops
-                    return;
-                }
-                
-                if (payload.eventType === 'INSERT') {
-                    // Real-time INSERT → add item to state (from any device/nickname)
-                    const newItem = migrateItemToV2(payload.new);
-                    newItem._fromRealtime = true; // Mark to prevent echo save
-                    
-                    // Check if item already exists (might have been added locally)
-                    const exists = items.findIndex(i => i.id === newItem.id) >= 0;
-                    if (exists) {
-                        // Item already exists - treat as UPDATE instead
-                        const index = items.findIndex(i => i.id === newItem.id);
-                        items[index] = {
-                            ...items[index],
-                            ...newItem,
-                            _fromRealtime: true
-                        };
-                    } else {
-                        // New item - add it
-                        const hasValidName = newItem.name && 
-                                           newItem.name.trim() !== '' && 
-                                           newItem.name !== 'Unknown Item';
-                        if (hasValidName) {
-                            items.push(newItem);
-                        }
-                    }
-                    
-                    // Always re-render to reflect changes
-                    renderBoard();
-                    updatePresenceIndicator();
-                } else if (payload.eventType === 'UPDATE') {
-                    // Real-time UPDATE → ALWAYS accept as source of truth
-                    const updatedItem = migrateItemToV2(payload.new);
-                    updatedItem._fromRealtime = true; // Mark to prevent echo save
-                    
-                    const index = items.findIndex(i => i.id === updatedItem.id);
-                    if (index >= 0) {
-                        const existingItem = items[index];
-                        
-                        // CRITICAL: Real-time updates are ALWAYS the source of truth
-                        // Do NOT block based on local change time - accept all updates
-                        // The lastLocalUpdateIds check above already prevents echo loops
-                        
-                        // Validate name from update
-                        const updateHasValidName = updatedItem.name && 
-                                                  updatedItem.name.trim() !== '' && 
-                                                  updatedItem.name !== 'Unknown Item' &&
-                                                  !updatedItem.name.startsWith('Unknown');
-                        
-                        // Validate existing name
-                        const existingHasValidName = existingItem.name && 
-                                                    existingItem.name.trim() !== '' && 
-                                                    existingItem.name !== 'Unknown Item' &&
-                                                    !existingItem.name.startsWith('Unknown');
-                        
-                        // Use update name if valid, otherwise preserve existing
-                        let finalName = existingItem.name;
-                        if (updateHasValidName) {
-                            finalName = updatedItem.name;
-                        } else if (!existingHasValidName && updateHasValidName) {
-                            finalName = updatedItem.name;
-                        }
-                        
-                        // CRITICAL: Real-time update is source of truth - merge database fields
-                        items[index] = {
-                            ...existingItem,
-                            ...updatedItem,
-                            name: finalName,
-                            _fromRealtime: true,
-                            // Preserve local-only fields that aren't in database
-                            history: existingItem.history || updatedItem.history,
-                            statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps || {}
-                        };
-                        
-                        // Auto-detect issue status (same as local updates)
-                        detectAndUpdateIssueStatus(items[index]);
-                        
-                        // CRITICAL: Re-render UI immediately to reflect state changes
-                        renderBoard();
-                        updatePresenceIndicator();
-                        
-                        // Refresh views if active
-                        if (currentView === 'dashboard') {
-                            renderDashboard();
-                        } else if (currentView === 'mobile') {
-                            renderMobileView();
-                        }
-                    } else {
-                        // Item doesn't exist locally - add it (might be from another device)
-                        const hasValidName = updatedItem.name && 
-                                           updatedItem.name.trim() !== '' && 
-                                           updatedItem.name !== 'Unknown Item';
-                        if (hasValidName) {
-                            items.push(updatedItem);
-                            renderBoard();
-                        }
-                    }
-                } else if (payload.eventType === 'DELETE') {
-                    // Real-time DELETE → remove item from state
-                    const deletedId = payload.old.id;
-                    items = items.filter(i => i.id !== deletedId);
-                    
-                    // Log operation once
-                    if (!window.realtimeDeleteLogged) {
-                        console.log(`✅ Remote DELETE: ${deletedId}`);
-                        window.realtimeDeleteLogged = true;
-                    }
-                    
-                    // CRITICAL: Re-render UI to reflect state changes
-                    renderBoard();
-                    updatePresenceIndicator();
-                }
-            }
-        )
-        .subscribe((status, err) => {
-            if (status === 'SUBSCRIBED') {
-                realtimeSubscribed = true;
-                isReconnecting = false;
-                console.log('✅ Realtime connected: purchase_items');
-            } else if (status === 'CLOSED') {
-                // CLOSED status - channel closed, need to reconnect once
-                realtimeSubscribed = false;
-                console.warn('⚠️ Realtime CLOSED: purchase_items');
-                
-                // CRITICAL: Reconnect once, not in a loop
-                if (!isReconnecting) {
-                    isReconnecting = true;
-                    setTimeout(() => {
-                        isReconnecting = false;
-                        if (checkSupabaseConfig() && !realtimeSubscribed) {
-                            console.log('🔄 Reconnecting realtime after CLOSED...');
-                            setupRealtimeSubscriptions();
-                        }
-                    }, 3000);
-                }
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                realtimeSubscribed = false;
-                console.error(`❌ Realtime error (${status}):`, err);
-                if (err) {
-                    if (err.message && err.message.includes('permission denied')) {
-                        console.error('⚠️ RLS Policy Issue: Run FIX_REALTIME_SYNC.sql');
-                    }
-                    if (err.message && err.message.includes('publication')) {
-                        console.error('⚠️ Real-time Not Enabled: Add tables to supabase_realtime publication');
-                    }
-                }
-                // Reconnect once after error
-                if (!isReconnecting) {
-                    isReconnecting = true;
-                    setTimeout(() => {
-                        isReconnecting = false;
-                        if (checkSupabaseConfig() && !realtimeSubscribed) {
-                            setupRealtimeSubscriptions();
-                        }
-                    }, 5000);
-                }
-            }
-        });
-    
-    realtimeSubscriptions.push(itemsChannel);
-    
-    // Subscribe to purchase_history changes - CRITICAL: One subscription only, no user filtering
-    const purchaseChannel = supabaseClientInstance
-        .channel('purchase-history', {
-            config: {
-                broadcast: { self: true }
-            }
-        })
-        .on('postgres_changes',
-            { 
-                event: '*', 
-                schema: 'public', 
-                table: 'purchase_history'
-                // CRITICAL: No filter - subscribe to ALL changes regardless of user/device/nickname
-            },
-            (payload) => {
-                // Real-time history update - update UI only (silent)
-                if (payload.eventType === 'INSERT') {
-                const record = {
-                    id: payload.new.id,
-                        date: new Date(payload.new.created_at).getTime(),
-                    itemName: payload.new.item_name,
-                    supplier: payload.new.supplier,
-                    quantity: payload.new.quantity,
-                    unit: payload.new.unit,
-                    status: payload.new.status,
-                    receiver: payload.new.receiver ? JSON.parse(payload.new.receiver) : null,
-                    issueType: payload.new.issue_type,
-                    issueReason: payload.new.issue_reason,
-                    itemId: payload.new.item_id
-                };
-                purchaseRecords.push(record);
-                    
-                // Update UI if purchase history modal is open
-                    if (document.getElementById('statsModal')?.classList.contains('active')) {
-                    renderStatsDashboard();
-                }
-                    updatePresenceIndicator();
-                } else if (payload.eventType === 'DELETE') {
-                    purchaseRecords = purchaseRecords.filter(r => r.id !== payload.old.id);
-                    if (document.getElementById('statsModal')?.classList.contains('active')) {
-                        renderStatsDashboard();
-                    }
-                    updatePresenceIndicator();
-                }
-            }
-        )
-        .subscribe((status, err) => {
-            if (status === 'SUBSCRIBED') {
-                isReconnecting = false;
-                console.log('✅ Realtime connected: purchase_history');
-            } else if (status === 'CLOSED') {
-                console.warn('⚠️ Realtime CLOSED: purchase_history');
-                // Reconnect handled by main itemsChannel subscription
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                console.error(`❌ Realtime error (${status}): purchase_history`, err);
-                // Reconnect handled by main itemsChannel subscription
-            }
-        });
-    
-    realtimeSubscriptions.push(purchaseChannel);
-    
-    // Note: Presence channel removed - not needed for core sync functionality
-    
-    console.log('✅ Realtime subscriptions setup complete');
-    return true;
+    return realtimeManager.start();
 }
 
-// Network status monitoring and lifecycle handling
-// Reconnect real-time on network reconnect
+// Network status monitoring - use RealtimeManager
 window.addEventListener('online', () => {
     isOnline = true;
     if (checkSupabaseConfig() && supabaseClientInstance) {
-        // Reconnect real-time subscriptions if not already subscribed
-        if (!realtimeSubscribed) {
-        setupRealtimeSubscriptions();
+        if (!realtimeManager) {
+            realtimeManager = RealtimeManager.getInstance();
+        }
+        if (!realtimeManager.isActive()) {
+            realtimeManager.start();
         }
         loadData().catch(err => console.error('Error loading data on online:', err));
     }
 });
 
-// Handle page visibility changes (mobile backgrounding/foregrounding)
+// Handle page visibility changes - use RealtimeManager
 document.addEventListener('visibilitychange', () => {
     if (!document.hidden && checkSupabaseConfig() && supabaseClientInstance) {
-        // Page became visible - reconnect if needed
-        if (!realtimeSubscribed) {
-            setupRealtimeSubscriptions();
+        if (!realtimeManager) {
+            realtimeManager = RealtimeManager.getInstance();
+        }
+        if (!realtimeManager.isActive()) {
+            realtimeManager.start();
         }
     }
 });
 
-// Handle page focus (desktop tab switching)
+// Handle page focus - use RealtimeManager
 window.addEventListener('focus', () => {
     if (checkSupabaseConfig() && supabaseClientInstance) {
-        // Page focused - reconnect if needed (only once)
-        if (!realtimeSubscribed && !isReconnecting) {
-            console.log('🔄 Page focused - reconnecting realtime...');
-            setupRealtimeSubscriptions();
+        if (!realtimeManager) {
+            realtimeManager = RealtimeManager.getInstance();
+        }
+        if (!realtimeManager.isActive()) {
+            realtimeManager.start();
         }
     }
 });
@@ -6928,11 +6987,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Verify subscriptions are active after data load
                 setTimeout(() => {
                     if (checkSupabaseConfig()) {
-                        if (realtimeSubscribed) {
+                        if (!realtimeManager) {
+                            realtimeManager = RealtimeManager.getInstance();
+                        }
+                        if (realtimeManager.isActive()) {
                             console.log('✅ Realtime subscriptions active');
                         } else {
                             console.warn('⚠️ Realtime subscriptions not active - attempting setup...');
-                            setupRealtimeSubscriptions();
+                            realtimeManager.start();
                         }
                     }
                 }, 1000); // Brief delay to allow subscriptions to establish
