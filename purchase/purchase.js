@@ -2874,7 +2874,17 @@ function renderBoard() {
 }
 
 // Show visual alerts for urgent/delayed items (using shared dashboard data)
+// DISABLED: Urgent warning bar disabled per requirements - function short-circuited to prevent rendering
 function showUrgentAlerts() {
+    // Early return - urgent warning bar is disabled
+    // Remove any existing alert badge that might have been created before
+    const existingAlert = document.getElementById('urgentAlertBadge');
+    if (existingAlert) {
+        existingAlert.remove();
+    }
+    return; // Exit early - do not render urgent alert bar
+    
+    /* ORIGINAL CODE - DISABLED (kept for easy re-enable)
     // Use shared dashboard data for consistency
     const dashboardData = computeDashboardData(items, 'all'); // Use 'all' to show all urgent/delayed
     
@@ -2917,6 +2927,7 @@ function showUrgentAlerts() {
             }
         }, 10000);
     }
+    */
 }
 
 // Get filtered items based on search and all filters (using selectors)
