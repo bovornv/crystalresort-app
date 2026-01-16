@@ -203,9 +203,17 @@ async function saveItemToSupabase(item, source = 'user') {
             itemData.updated_by = user.id;
         }
         
+        // Track updated_by nickname for display
+        if (currentUser?.nickname) {
+            item.updated_by_nickname = currentUser.nickname;
+        }
+        
         // Only set created_by if this is a new item
         if (!item.created_by && user?.id) {
             itemData.created_by = user.id;
+            if (currentUser?.nickname) {
+                item.created_by_nickname = currentUser.nickname;
+            }
         }
         
         // UPSERT with onConflict - must include all NOT NULL columns
@@ -621,6 +629,15 @@ function setupRealtimeSubscriptions() {
                     const index = items.findIndex(i => i.id === updatedItem.id);
                     if (index >= 0) {
                         const existingItem = items[index];
+                        
+                        // CRITICAL: Don't overwrite if local change is very recent (within 500ms)
+                        // This prevents bouncing back when user just moved an item
+                        const localChangeTime = existingItem.lastUpdated || 0;
+                        const now = Date.now();
+                        if ((now - localChangeTime) < 500 && !existingItem._fromRealtime) {
+                            // Local change is very recent, ignore this remote update
+                            return;
+                        }
                         
                         // Validate name from update
                         const updateHasValidName = updatedItem.name && 
@@ -2691,7 +2708,7 @@ function renderBoard() {
                 const groupItems = supplierGroups[supplier];
                 if (groupItems.length > 0) {
                     const supplierHeader = document.createElement('div');
-                    supplierHeader.className = 'supplier-group-header-mobile';
+                    supplierHeader.className = 'supplier-group-header';
                     supplierHeader.innerHTML = `<span class="supplier-group-name">${getSupplierDisplayName(supplier)}</span> <span class="supplier-group-count">${groupItems.length}</span>`;
                     fragment.appendChild(supplierHeader);
                     
@@ -2703,50 +2720,40 @@ function renderBoard() {
         });
     }
 
-    // Sections that should be grouped by supplier on mobile
+    // Sections that should be grouped by supplier (mobile, tablet, and desktop)
     const groupedSections = ['need-to-buy', 'ordered', 'bought', 'received'];
 
-    if (isMobile) {
-        // Separate items by status
-        const groupedSectionItems = {};
-        const otherItems = [];
-        
-        sortedItems.forEach(item => {
-            if (groupedSections.includes(item.status)) {
-                if (!groupedSectionItems[item.status]) {
-                    groupedSectionItems[item.status] = [];
-                }
-                groupedSectionItems[item.status].push(item);
-            } else {
-                otherItems.push(item);
+    // Separate items by status
+    const groupedSectionItems = {};
+    const otherItems = [];
+    
+    sortedItems.forEach(item => {
+        if (groupedSections.includes(item.status)) {
+            if (!groupedSectionItems[item.status]) {
+                groupedSectionItems[item.status] = [];
             }
-        });
-        
-        // Render grouped sections
-        groupedSections.forEach(status => {
-            const fragment = fragmentMap[status];
-            const items = groupedSectionItems[status] || [];
-            if (fragment && items.length > 0) {
-                renderGroupedBySupplier(items, fragment);
-            }
-        });
-        
-        // Render other items normally
-        otherItems.forEach(item => {
-            const fragment = fragmentMap[item.status];
-            if (fragment) {
-                fragment.appendChild(createItemCard(item));
-            }
-        });
-    } else {
-        // Desktop: render all items normally
-        sortedItems.forEach(item => {
-            const fragment = fragmentMap[item.status];
-            if (fragment) {
-                fragment.appendChild(createItemCard(item));
-            }
-        });
-    }
+            groupedSectionItems[item.status].push(item);
+        } else {
+            otherItems.push(item);
+        }
+    });
+    
+    // Render grouped sections (for all screen sizes)
+    groupedSections.forEach(status => {
+        const fragment = fragmentMap[status];
+        const items = groupedSectionItems[status] || [];
+        if (fragment && items.length > 0) {
+            renderGroupedBySupplier(items, fragment);
+        }
+    });
+    
+    // Render other items normally
+    otherItems.forEach(item => {
+        const fragment = fragmentMap[item.status];
+        if (fragment) {
+            fragment.appendChild(createItemCard(item));
+        }
+    });
 
     // Append fragments to containers (single DOM operation per column)
     COLUMN_ORDER.forEach(colId => {
@@ -3292,63 +3299,80 @@ function validateItemInput(name, quantity, unit, supplier) {
     return errors;
 }
 
+// Track form submission to prevent duplicates
+let isSubmittingAddItem = false;
+
 // Handle add item form submission v2
 async function handleAddItem(event) {
     if (!requireAuth(() => true)) return;
     event.preventDefault();
     
-    const name = document.getElementById('itemName').value.trim();
-    const quantity = parseFloat(document.getElementById('itemQuantity').value);
-    const unit = document.getElementById('itemUnit').value;
-    const supplier = document.getElementById('itemSupplier').value;
-    
-    // Validate input
-    const errors = validateItemInput(name, quantity, unit, supplier);
-    if (errors.length > 0) {
-        showNotification(errors.join(', '), 'error');
+    // Prevent duplicate submissions
+    if (isSubmittingAddItem) {
         return;
     }
+    isSubmittingAddItem = true;
     
-    const now = Date.now();
-    const newItem = {
-        id: generateId(),
-        name: name,
-        quantity: quantity,
-        requested_qty: quantity,
-        unit: unit,
-        supplier: supplier,
-        urgency: document.getElementById('itemUrgency').checked ? 'urgent' : 'normal',
-        notes: document.getElementById('itemNotes').value.trim() || null,
-        status: 'need-to-buy',
-        received_qty: 0,
-        actualQuantity: 0, // Keep for backward compatibility
-        issue: false,
-        issue_type: null,
-        issueReason: null,
-        qualityCheck: null,
-        statusTimestamps: {
-            'need-to-buy': now
-        },
-        lastUpdated: now
-    };
+    try {
+        const name = document.getElementById('itemName').value.trim();
+        const quantity = parseFloat(document.getElementById('itemQuantity').value);
+        const unit = document.getElementById('itemUnit').value;
+        const supplier = document.getElementById('itemSupplier').value;
+        
+        // Validate input
+        const errors = validateItemInput(name, quantity, unit, supplier);
+        if (errors.length > 0) {
+            showNotification(errors.join(', '), 'error');
+            return;
+        }
+        
+        const now = Date.now();
+        const newItem = {
+            id: generateId(),
+            name: name,
+            quantity: quantity,
+            requested_qty: quantity,
+            unit: unit,
+            supplier: supplier,
+            urgency: document.getElementById('itemUrgency').checked ? 'urgent' : 'normal',
+            notes: document.getElementById('itemNotes').value.trim() || null,
+            status: 'need-to-buy',
+            received_qty: 0,
+            actualQuantity: 0, // Keep for backward compatibility
+            issue: false,
+            issue_type: null,
+            issueReason: null,
+            qualityCheck: null,
+            statusTimestamps: {
+                'need-to-buy': now
+            },
+            lastUpdated: now,
+            created_by_nickname: currentUser?.nickname || null
+        };
 
-    items.push(newItem);
-    
-    // Track history
-    addItemHistory(newItem.id, `Item created`, currentUser);
-    
-    // Save to Supabase if configured (single save)
-    if (checkSupabaseConfig()) {
-        await saveItemToSupabase(newItem, 'user');
+        items.push(newItem);
+        
+        // Track history
+        addItemHistory(newItem.id, `Item created`, currentUser);
+        
+        // Save to Supabase if configured (single save)
+        if (checkSupabaseConfig()) {
+            await saveItemToSupabase(newItem, 'user');
+        }
+        
+        // Save to localStorage (fallback only if Supabase not configured)
+        if (!checkSupabaseConfig()) {
+            saveData().catch(err => console.error('Error saving data:', err));
+        }
+        renderBoard();
+        closeAddItemModal();
+        showNotification(t('itemAddedSuccess'), 'success');
+    } finally {
+        // Reset flag after a short delay to allow form reset
+        setTimeout(() => {
+            isSubmittingAddItem = false;
+        }, 1000);
     }
-    
-    // Save to localStorage (fallback only if Supabase not configured)
-    if (!checkSupabaseConfig()) {
-        saveData().catch(err => console.error('Error saving data:', err));
-    }
-    renderBoard();
-    closeAddItemModal();
-    showNotification(t('itemAddedSuccess'), 'success');
 }
 
 // Show edit item modal v2
@@ -3364,6 +3388,18 @@ function editItem(itemId) {
     document.getElementById('editItemSupplier').value = item.supplier;
     document.getElementById('editItemUrgency').checked = item.urgency === 'urgent';
     document.getElementById('editItemNotes').value = item.notes || '';
+    
+    // Show last edited by nickname
+    const lastEditedBy = item.updated_by_nickname || item.created_by_nickname || null;
+    const lastEditedByElement = document.getElementById('editItemLastEditedBy');
+    if (lastEditedByElement) {
+        if (lastEditedBy) {
+            lastEditedByElement.textContent = `แก้ไขล่าสุดโดย: ${lastEditedBy}`;
+            lastEditedByElement.style.display = 'block';
+        } else {
+            lastEditedByElement.style.display = 'none';
+        }
+    }
 
     const modal = document.getElementById('editItemModal');
     modal.classList.add('active');
