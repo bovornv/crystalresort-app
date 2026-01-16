@@ -288,9 +288,13 @@ async function saveItemToSupabase(item, source = 'user') {
         }
         
         // UPSERT with onConflict - must include all NOT NULL columns
+        // Use ignoreDuplicates: false to ensure updates happen even if record exists
         let { data, error } = await supabaseClientInstance
             .from('purchase_items')
-            .upsert(itemData, { onConflict: 'id' });
+            .upsert(itemData, { 
+                onConflict: 'id',
+                ignoreDuplicates: false  // Always update existing records
+            });
         
         // If error is about missing columns, try again with minimal columns (but ALWAYS include item_name)
         if (error && error.code === 'PGRST204') {
@@ -304,7 +308,10 @@ async function saveItemToSupabase(item, source = 'user') {
             };
             const retryResult = await supabaseClientInstance
                 .from('purchase_items')
-                .upsert(minimalData, { onConflict: 'id' });
+                .upsert(minimalData, { 
+                    onConflict: 'id',
+                    ignoreDuplicates: false
+                });
             if (retryResult.error) {
                 console.error('❌ Supabase save error (minimal retry):', retryResult.error);
                 throw retryResult.error;
@@ -313,9 +320,40 @@ async function saveItemToSupabase(item, source = 'user') {
             error = null;
         }
         
+        // Handle specific error types
         if (error) {
-            console.error('❌ Supabase save error:', error);
-            throw error;
+            if (error.code === '23505') {
+                // Unique constraint violation - item already exists, try update instead
+                console.warn('⚠️ Conflict detected, retrying as UPDATE:', item.id);
+                const { data: updateData, error: updateError } = await supabaseClientInstance
+                    .from('purchase_items')
+                    .update(itemData)
+                    .eq('id', item.id);
+                
+                if (updateError) {
+                    console.error('❌ Supabase update error:', updateError);
+                    throw updateError;
+                }
+                // Update succeeded, continue
+                error = null;
+            } else if (error.code === 'PGRST116') {
+                // Not found - item doesn't exist, try insert
+                console.warn('⚠️ Item not found, retrying as INSERT:', item.id);
+                const { data: insertData, error: insertError } = await supabaseClientInstance
+                    .from('purchase_items')
+                    .insert(itemData);
+                
+                if (insertError) {
+                    console.error('❌ Supabase insert error:', insertError);
+                    throw insertError;
+                }
+                // Insert succeeded, continue
+                error = null;
+            } else {
+                console.error('❌ Supabase save error:', error);
+                console.error('Error details:', { code: error.code, message: error.message, details: error.details });
+                throw error;
+            }
         }
         
         // Track this as a local update to prevent processing our own real-time events
