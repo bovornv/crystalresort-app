@@ -1214,6 +1214,13 @@ function hideAllContent() {
         appContainer.style.display = 'none';
         appContainer.style.visibility = 'hidden';
     }
+    
+    // Hide bottom actions bar (footer)
+    const bottomActionsBar = document.querySelector('.bottom-actions-bar');
+    if (bottomActionsBar) {
+        bottomActionsBar.style.display = 'none';
+        bottomActionsBar.style.visibility = 'hidden';
+    }
 }
 
 function showAllContent() {
