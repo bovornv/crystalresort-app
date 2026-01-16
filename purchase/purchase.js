@@ -255,10 +255,10 @@ async function saveItemToSupabase(item, source = 'user') {
         
         // Track this as a local update to prevent processing our own real-time events
         lastLocalUpdateIds.add(item.id);
-        // Clear after 2 seconds to allow legitimate remote updates
+        // Clear after 1 second to allow faster sync across devices
         setTimeout(() => {
             lastLocalUpdateIds.delete(item.id);
-        }, 2000);
+        }, 1000);
         
         // When status changes to 'received', insert snapshot into purchase_history
         if (item.status === 'received') {
@@ -562,15 +562,25 @@ function setupRealtimeSubscriptions() {
         return;
     }
     
-    // Prevent duplicate subscriptions - if already subscribed, don't recreate
-    if (realtimeSubscribed && realtimeSubscriptions.length > 0) {
-        return;
+    // Prevent duplicate subscriptions - check if channels are still active
+    // But allow reconnection if channels are closed/errored
+    const hasActiveSubscriptions = realtimeSubscriptions.length > 0 && 
+        realtimeSubscriptions.some(sub => {
+            try {
+                return sub.state === 'joined' || sub.state === 'joining';
+            } catch (e) {
+                return false;
+            }
+        });
+    
+    if (hasActiveSubscriptions && realtimeSubscribed) {
+        return; // Already subscribed and active
     }
     
     // Clean up any existing subscriptions first
     realtimeSubscriptions.forEach(sub => {
         try {
-        supabaseClientInstance.removeChannel(sub);
+            supabaseClientInstance.removeChannel(sub);
         } catch (e) {
             // Silent cleanup
         }
