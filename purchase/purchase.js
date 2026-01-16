@@ -1088,8 +1088,16 @@ function updateUserUI() {
         const roleBadge = userRole === 'admin' ? ' [Admin]' : userRole === 'manager' ? ' [Manager]' : '';
         
         // Show user menu, hide login button
-        if (userMenuContainer) userMenuContainer.style.display = 'flex';
-        if (loginBtnTop) loginBtnTop.style.display = 'none';
+        if (userMenuContainer) {
+            userMenuContainer.style.display = 'flex';
+            userMenuContainer.style.visibility = 'visible';
+            userMenuContainer.style.opacity = '1';
+        }
+        if (loginBtnTop) {
+            loginBtnTop.style.display = 'none';
+            loginBtnTop.style.visibility = 'hidden';
+            loginBtnTop.style.opacity = '0';
+        }
         if (userMenuName) userMenuName.textContent = displayName + roleBadge;
         // Show full nickname instead of initials
         if (userMenuNickname) userMenuNickname.textContent = displayName;
@@ -1116,8 +1124,16 @@ function updateUserUI() {
         }
     } else {
         // Hide user menu, show login button
-        if (userMenuContainer) userMenuContainer.style.display = 'none';
-        if (loginBtnTop) loginBtnTop.style.display = 'flex';
+        if (userMenuContainer) {
+            userMenuContainer.style.display = 'none';
+            userMenuContainer.style.visibility = 'hidden';
+            userMenuContainer.style.opacity = '0';
+        }
+        if (loginBtnTop) {
+            loginBtnTop.style.display = 'flex';
+            loginBtnTop.style.visibility = 'visible';
+            loginBtnTop.style.opacity = '1';
+        }
         if (currentUserSpan) currentUserSpan.textContent = '';
         
         // Hide app content

@@ -41,12 +41,10 @@
             opacity: 1 !important;
         }
         .user-menu-container {
-            display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
         }
         .login-btn-top {
-            display: flex !important;
             visibility: visible !important;
             opacity: 1 !important;
         }
@@ -62,7 +60,6 @@
                 opacity: 1 !important;
             }
             .user-menu-container {
-                display: flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
             }
@@ -72,7 +69,6 @@
                 opacity: 1 !important;
             }
             .login-btn-top {
-                display: flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
             }
@@ -95,10 +91,10 @@
                 </button>
                 <!-- User Menu (shown when logged in) -->
                 <div class="user-menu-container" id="userMenuContainer" style="display: none;">
-                    <button class="user-menu-btn" id="userMenuBtn" onclick="toggleUserMenu()">
+                    <button class="user-menu-btn" id="userMenuBtn" onclick="handleLogout()" title="คลิกเพื่อออกจากระบบ">
                         <span id="userMenuNickname">U</span>
                     </button>
-                    <div class="user-menu-dropdown" id="userMenuDropdown">
+                    <div class="user-menu-dropdown" id="userMenuDropdown" style="display: none;">
                         <div class="user-menu-header">
                             <div class="user-menu-name" id="userMenuName">User</div>
                             <div class="user-menu-label" data-i18n="loggedInUser">ผู้ใช้ที่เข้าสู่ระบบ</div>
