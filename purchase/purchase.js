@@ -636,11 +636,12 @@ function setupRealtimeSubscriptions() {
                     if (index >= 0) {
                         const existingItem = items[index];
                         
-                        // CRITICAL: Don't overwrite if local change is very recent (within 500ms)
+                        // CRITICAL: Don't overwrite if local change is very recent (within 200ms)
                         // This prevents bouncing back when user just moved an item
+                        // Reduced from 500ms to 200ms to allow faster sync across devices
                         const localChangeTime = existingItem.lastUpdated || 0;
                         const now = Date.now();
-                        if ((now - localChangeTime) < 500 && !existingItem._fromRealtime) {
+                        if ((now - localChangeTime) < 200 && !existingItem._fromRealtime) {
                             // Local change is very recent, ignore this remote update
                             return;
                         }
