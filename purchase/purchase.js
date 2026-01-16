@@ -1133,6 +1133,13 @@ function updateUserUI() {
         if (boardView) {
             boardView.style.display = 'block';
         }
+        
+        // Ensure bottom actions bar (footer) is visible
+        const bottomActionsBar = document.querySelector('.bottom-actions-bar');
+        if (bottomActionsBar) {
+            bottomActionsBar.style.display = 'flex';
+            bottomActionsBar.style.visibility = 'visible';
+        }
     } else {
         // Hide user menu, show login button
         if (userMenuContainer) {
@@ -1155,10 +1162,18 @@ function updateUserUI() {
         if (userMenuNickname) userMenuNickname.textContent = '';
         if (userMenuName) userMenuName.textContent = '';
         
-        // Hide app content
+        // Hide app content (but keep login button visible)
         const appContainer = document.querySelector('.app-container');
         if (appContainer) {
             appContainer.style.display = 'none';
+            appContainer.style.visibility = 'hidden';
+        }
+        
+        // Hide bottom actions bar (footer)
+        const bottomActionsBar = document.querySelector('.bottom-actions-bar');
+        if (bottomActionsBar) {
+            bottomActionsBar.style.display = 'none';
+            bottomActionsBar.style.visibility = 'hidden';
         }
     }
 }
@@ -1212,6 +1227,13 @@ function showAllContent() {
     const boardView = document.getElementById('boardView');
     if (boardView) {
         boardView.style.display = 'block';
+    }
+    
+    // Ensure bottom actions bar (footer) is visible
+    const bottomActionsBar = document.querySelector('.bottom-actions-bar');
+    if (bottomActionsBar) {
+        bottomActionsBar.style.display = 'flex';
+        bottomActionsBar.style.visibility = 'visible';
     }
 }
 
