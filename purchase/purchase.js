@@ -777,6 +777,9 @@ class RealtimeManager {
         this.lastRetryTime = 0;
         this.retryCount = 0;
         this.maxRetryDelay = 10000; // 10 seconds between retries
+        this._maxRetriesLogged = false;
+        this._rateLimitLogged = false;
+        this._lastRateLimitLog = 0;
     }
     
     /**
@@ -785,8 +788,12 @@ class RealtimeManager {
      * @returns {boolean} true if started successfully, false if already started or config invalid
      */
     start() {
+        // Log startup attempt
+        console.log('🔵 RealtimeManager.start() called');
+        
         // Idempotent check: if already started and channels are active, do nothing
         if (this.isStarted && this._hasActiveChannels()) {
+            console.log('⏭️ RealtimeManager.start() skipped - already started with active channels');
             return false; // Already started
         }
         
@@ -814,6 +821,7 @@ class RealtimeManager {
         
         // Generate unique channel ID for this session
         this.channelId = Math.random().toString(36).substr(2, 9);
+        console.log(`🔵 RealtimeManager: Creating channels with ID ${this.channelId.substring(0, 6)}...`);
         
         // Create and subscribe to purchase_items channel
         this._createItemsChannel(client);
@@ -827,7 +835,7 @@ class RealtimeManager {
         this.isStarted = true;
         // Sync global flag
         realtimeSubscribed = true;
-        console.log('✅ RealtimeManager started');
+        console.log('✅ RealtimeManager started - 3 channels created');
         
         return true;
     }
@@ -870,6 +878,9 @@ class RealtimeManager {
         realtimeSubscribed = false;
         // Reset retry tracking when stopped
         this.retryCount = 0;
+        this._maxRetriesLogged = false;
+        this._rateLimitLogged = false;
+        this._lastRateLimitLog = 0;
         
         console.log('🛑 RealtimeManager stopped');
     }
@@ -916,22 +927,25 @@ class RealtimeManager {
             this.isReconnecting = false;
             isReconnecting = false;
             this.retryCount = 0; // Reset retry count on success
-            console.log(`✅ ${channelLabel} SUBSCRIBED`);
+            console.log(`✅ ${channelLabel} SUBSCRIBED (websocket connected)`);
         } else if (status === 'TIMED_OUT') {
             // Timeout - log but don't retry immediately (may recover on its own)
             console.warn(`⏱️ ${channelLabel} TIMED_OUT - waiting for recovery`);
             // Don't call stop() for timeout - channel may recover
         } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
             // Critical errors - must stop and retry
-            console.error(`❌ ${channelLabel} ${status}`, err || '');
-            
-            // Log helpful error details
-            if (err) {
-                if (err.message && err.message.includes('permission denied')) {
-                    console.error(`⚠️ ${channelLabel} RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.`);
-                }
-                if (err.message && err.message.includes('publication')) {
-                    console.error(`⚠️ ${channelLabel} Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE ${channelName};" in Supabase SQL Editor.`);
+            // Only log first error to prevent spam (rate limiting already prevents retries)
+            if (this.retryCount === 0 || (Date.now() - this.lastRetryTime) > 5000) {
+                console.error(`❌ ${channelLabel} ${status}`, err || '');
+                
+                // Log helpful error details (only once)
+                if (err) {
+                    if (err.message && err.message.includes('permission denied')) {
+                        console.error(`⚠️ ${channelLabel} RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.`);
+                    }
+                    if (err.message && err.message.includes('publication')) {
+                        console.error(`⚠️ ${channelLabel} Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE ${channelName};" in Supabase SQL Editor.`);
+                    }
                 }
             }
             
@@ -954,10 +968,19 @@ class RealtimeManager {
                     }
                 }, 2000);
             } else if (this.retryCount >= 1) {
-                console.warn(`⚠️ ${channelLabel} Max retries reached. Manual restart required.`);
+                // Only log max retries warning once
+                if (!this._maxRetriesLogged) {
+                    console.warn(`⚠️ ${channelLabel} Max retries reached. Manual restart required.`);
+                    this._maxRetriesLogged = true;
+                }
             } else {
                 const waitTime = Math.ceil((this.maxRetryDelay - timeSinceLastRetry) / 1000);
-                console.log(`⏳ ${channelLabel} Rate limited - waiting ${waitTime}s before retry...`);
+                // Don't spam rate limit messages
+                if (!this._rateLimitLogged || (Date.now() - this._lastRateLimitLog) > 5000) {
+                    console.log(`⏳ ${channelLabel} Rate limited - waiting ${waitTime}s before retry...`);
+                    this._rateLimitLogged = true;
+                    this._lastRateLimitLog = Date.now();
+                }
             }
         } else {
             // Unknown status - log for debugging
