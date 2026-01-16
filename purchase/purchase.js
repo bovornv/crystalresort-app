@@ -4629,6 +4629,171 @@ function closeStatsModal() {
     }
 }
 
+// Show Received Items Modal
+function showReceivedItemsModal() {
+    if (!isLoggedIn()) {
+        showNotification(t('pleaseLogin'), 'error');
+        return;
+    }
+    
+    try {
+        renderReceivedItems();
+        const modal = document.getElementById('receivedItemsModal');
+        if (modal) {
+            modal.classList.add('active');
+        }
+    } catch (error) {
+        console.error('Error showing received items modal:', error);
+        showNotification('Error loading received items', 'error');
+    }
+}
+
+function closeReceivedItemsModal() {
+    const modal = document.getElementById('receivedItemsModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// Render received items (items received correctly)
+function renderReceivedItems() {
+    const content = document.getElementById('receivedItemsContent');
+    if (!content) return;
+    
+    // Get items that were received correctly
+    // Items with purchase records that have status 'OK' or items in 'received'/'verified' status without issues
+    const receivedItems = purchaseRecords
+        .filter(record => record.status === 'OK')
+        .map(record => {
+            // Find the corresponding item if it still exists
+            const item = items.find(i => i.id === record.itemId);
+            return {
+                ...record,
+                item: item,
+                receivedDate: record.date,
+                receivedBy: record.receiver ? (typeof record.receiver === 'string' ? JSON.parse(record.receiver) : record.receiver) : null
+            };
+        })
+        .sort((a, b) => b.receivedDate - a.receivedDate); // Most recent first
+    
+    if (receivedItems.length === 0) {
+        content.innerHTML = '<div style="text-align: center; padding: 40px; color: #787774;"><p style="font-size: 16px;">ยังไม่มีรายการที่รับของถูกต้อง</p></div>';
+        return;
+    }
+    
+    const itemsHtml = receivedItems.map(record => {
+        const unitDisplay = getUnitDisplayName(record.unit);
+        const receivedByNickname = record.receivedBy?.nickname || record.receivedBy?.email?.split('@')[0] || 'ไม่ทราบ';
+        const receivedDate = new Date(record.receivedDate);
+        const dateStr = receivedDate.toLocaleDateString('th-TH', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        return `
+            <div style="background: #ffffff; border: 1px solid #e9e9e7; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #37352f;">🟢 ${record.itemName || 'Unknown Item'}</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: #787774;">
+                    <div><strong>จำนวน:</strong> ${record.quantity} ${unitDisplay}</div>
+                    ${record.supplier ? `<div><strong>ร้านค้า:</strong> ${getSupplierDisplayName(record.supplier)}</div>` : ''}
+                    <div><strong>วันที่รับ:</strong> ${dateStr}</div>
+                    <div><strong>รับโดย:</strong> ${receivedByNickname}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    content.innerHTML = itemsHtml;
+}
+
+// Show Issue Items Modal
+function showIssueItemsModal() {
+    if (!isLoggedIn()) {
+        showNotification(t('pleaseLogin'), 'error');
+        return;
+    }
+    
+    try {
+        renderIssueItems();
+        const modal = document.getElementById('issueItemsModal');
+        if (modal) {
+            modal.classList.add('active');
+        }
+    } catch (error) {
+        console.error('Error showing issue items modal:', error);
+        showNotification('Error loading issue items', 'error');
+    }
+}
+
+function closeIssueItemsModal() {
+    const modal = document.getElementById('issueItemsModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+// Render issue items (items with problems)
+function renderIssueItems() {
+    const content = document.getElementById('issueItemsContent');
+    if (!content) return;
+    
+    // Get items with issues from purchase records
+    const issueItems = purchaseRecords
+        .filter(record => record.status === 'Issue')
+        .map(record => {
+            const item = items.find(i => i.id === record.itemId);
+            return {
+                ...record,
+                item: item,
+                reportedDate: record.date,
+                reportedBy: record.receiver ? (typeof record.receiver === 'string' ? JSON.parse(record.receiver) : record.receiver) : null
+            };
+        })
+        .sort((a, b) => b.reportedDate - a.reportedDate); // Most recent first
+    
+    if (issueItems.length === 0) {
+        content.innerHTML = '<div style="text-align: center; padding: 40px; color: #787774;"><p style="font-size: 16px;">ยังไม่มีรายการสินค้าที่มีปัญหา</p></div>';
+        return;
+    }
+    
+    const itemsHtml = issueItems.map(record => {
+        const unitDisplay = getUnitDisplayName(record.unit);
+        const reportedByNickname = record.reportedBy?.nickname || record.reportedBy?.email?.split('@')[0] || 'ไม่ทราบ';
+        const reportedDate = new Date(record.reportedDate);
+        const dateStr = reportedDate.toLocaleDateString('th-TH', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const issueTypeLabel = getIssueTypeLabel(record.issueType);
+        
+        return `
+            <div style="background: #fff5f5; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                    <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #37352f;">🔴 ${record.itemName || 'Unknown Item'}</h3>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: #787774;">
+                    <div><strong>จำนวน:</strong> ${record.quantity} ${unitDisplay}</div>
+                    ${record.supplier ? `<div><strong>ร้านค้า:</strong> ${getSupplierDisplayName(record.supplier)}</div>` : ''}
+                    <div><strong>ประเภทปัญหา:</strong> <span style="color: #dc2626; font-weight: 500;">${issueTypeLabel || record.issueType || 'ไม่ระบุ'}</span></div>
+                    ${record.issueReason ? `<div><strong>รายละเอียด:</strong> ${record.issueReason}</div>` : ''}
+                    <div><strong>วันที่แจ้ง:</strong> ${dateStr}</div>
+                    <div><strong>แจ้งโดย:</strong> ${reportedByNickname}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    content.innerHTML = itemsHtml;
+}
+
 function showWeeklyReviewModal() {
     if (!isLoggedIn()) {
         showNotification(t('pleaseLogin'), 'error');
