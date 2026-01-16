@@ -4143,9 +4143,21 @@ async function moveItem(itemId, newStatus) {
     
     // Save to Supabase if configured (single save)
     if (checkSupabaseConfig()) {
-        const saved = await saveItemToSupabase(item, 'user');
-        if (!saved) {
-            console.warn('⚠️ Failed to save item to Supabase - sync may not work');
+        try {
+            const saved = await saveItemToSupabase(item, 'user');
+            if (!saved) {
+                // Don't warn if save was skipped due to debouncing or real-time (these are normal)
+                // Only warn if there was an actual error
+            }
+        } catch (error) {
+            console.error('❌ Error saving item to Supabase:', error);
+            console.error('Item details:', { id: item.id, name: item.name, status: item.status });
+            // Still save to localStorage as fallback
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
         }
     } else {
         // Fallback to localStorage only if Supabase not configured
