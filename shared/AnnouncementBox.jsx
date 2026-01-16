@@ -26,40 +26,56 @@ const AnnouncementBox = () => {
 
     const loadAnnouncement = async () => {
       try {
-        const { data, error } = await supabase
-          .from('announcements')
-          .select('*')
-          .eq('id', 'main')
-          .single();
+        // Check if Supabase is configured
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+        const isSupabaseConfigured = supabaseUrl && supabaseKey && 
+          supabaseUrl !== '' && supabaseKey !== '' &&
+          !supabaseUrl.includes('placeholder') && !supabaseKey.includes('placeholder');
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-          console.error('Error loading announcement:', error);
-          return;
+        if (isSupabaseConfigured) {
+          const { data, error } = await supabase
+            .from('announcements')
+            .select('*')
+            .eq('id', 'main')
+            .single();
+
+          if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+            console.error('Error loading announcement from Supabase:', error);
+            // Fall through to localStorage fallback
+          } else if (data) {
+            // Always set announcement, even if text is empty (to show edit form)
+            setAnnouncement({
+              text: data.text || '',
+              updatedAt: data.updated_at
+            });
+            setEditText(data.text || '');
+            setIsLoading(false);
+            return;
+          }
         }
+      } catch (e) {
+        console.error('Error loading announcement from Supabase:', e);
+      }
 
-        if (data && data.text) {
+      // Fallback to localStorage if Supabase fails or not configured
+      try {
+        const stored = localStorage.getItem('crystal_announcement');
+        if (stored) {
+          const data = JSON.parse(stored);
           setAnnouncement({
-            text: data.text,
-            updatedAt: data.updated_at
+            text: data.text || '',
+            updatedAt: data.updatedAt
           });
-          setEditText(data.text);
+          setEditText(data.text || '');
         } else {
           setAnnouncement(null);
           setEditText('');
         }
-      } catch (e) {
-        console.error('Error loading announcement:', e);
-        // Fallback to localStorage if Supabase fails
-        const stored = localStorage.getItem('crystal_announcement');
-        if (stored) {
-          try {
-            const data = JSON.parse(stored);
-            setAnnouncement(data);
-            setEditText(data.text || '');
-          } catch (parseError) {
-            console.error('Error parsing localStorage announcement:', parseError);
-          }
-        }
+      } catch (parseError) {
+        console.error('Error parsing localStorage announcement:', parseError);
+        setAnnouncement(null);
+        setEditText('');
       } finally {
         setIsLoading(false);
       }
@@ -68,39 +84,55 @@ const AnnouncementBox = () => {
     // Initial load
     loadAnnouncement();
 
-    // Subscribe to realtime updates
-    try {
-      realtimeSubscription = supabase
-        .channel('announcements-changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'announcements',
-            filter: 'id=eq.main'
-          }, 
-          (payload) => {
-            console.log('Announcement updated via realtime:', payload);
-            if (payload.new && payload.new.text) {
-              setAnnouncement({
-                text: payload.new.text,
-                updatedAt: payload.new.updated_at
-              });
-              setEditText(payload.new.text);
-            } else {
-              setAnnouncement(null);
-              setEditText('');
+    // Subscribe to realtime updates (only if Supabase is configured)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+    const isSupabaseConfigured = supabaseUrl && supabaseKey && 
+      supabaseUrl !== '' && supabaseKey !== '' &&
+      !supabaseUrl.includes('placeholder') && !supabaseKey.includes('placeholder');
+
+    if (isSupabaseConfigured) {
+      try {
+        realtimeSubscription = supabase
+          .channel('announcements-changes')
+          .on('postgres_changes', 
+            { 
+              event: '*', 
+              schema: 'public', 
+              table: 'announcements',
+              filter: 'id=eq.main'
+            }, 
+            (payload) => {
+              console.log('Announcement updated via realtime:', payload);
+              if (payload.new) {
+                setAnnouncement({
+                  text: payload.new.text || '',
+                  updatedAt: payload.new.updated_at
+                });
+                setEditText(payload.new.text || '');
+              } else {
+                setAnnouncement(null);
+                setEditText('');
+              }
             }
-          }
-        )
-        .subscribe();
-    } catch (e) {
-      console.error('Error setting up realtime subscription:', e);
+          )
+          .subscribe();
+      } catch (e) {
+        console.error('Error setting up realtime subscription:', e);
+      }
     }
+
+    // Fallback: Poll for updates every 5 seconds if realtime doesn't work
+    const pollInterval = setInterval(() => {
+      loadAnnouncement();
+    }, 5000);
 
     return () => {
       if (realtimeSubscription) {
         supabase.removeChannel(realtimeSubscription);
+      }
+      if (pollInterval) {
+        clearInterval(pollInterval);
       }
     };
   }, []);
@@ -220,6 +252,7 @@ const AnnouncementBox = () => {
     return null; // Don't show anything while loading
   }
 
+  // Note: Check for announcement existence, not text (empty text is valid)
   if (!announcement || isEditing) {
     return (
       <div className="shared-announcement-box shared-announcement-box-editing">
@@ -292,11 +325,6 @@ const AnnouncementBox = () => {
         <div className="shared-announcement-body">
           {formatBulletPoints(announcement.text)}
         </div>
-        {announcement.updatedAt && (
-          <div className="shared-announcement-time">
-            อัปเดต: {formatTime(announcement.updatedAt)}
-          </div>
-        )}
       </div>
     </div>
   );

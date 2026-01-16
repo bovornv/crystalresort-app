@@ -64,14 +64,15 @@
           return loadAnnouncementFromLocalStorage();
         }
 
-        if (data && data.text) {
+        if (data) {
+          // Always return data, even if text is empty (to show edit form)
           // Also save to localStorage as backup
           localStorage.setItem('crystal_announcement', JSON.stringify({
-            text: data.text,
+            text: data.text || '',
             updatedAt: data.updated_at
           }));
           return {
-            text: data.text,
+            text: data.text || '',
             updatedAt: data.updated_at
           };
         }
@@ -295,11 +296,6 @@
         <div class="shared-announcement-body">
           ${formatBulletPoints(announcement.text)}
         </div>
-        ${announcement.updatedAt ? `
-          <div class="shared-announcement-time">
-            อัปเดต: ${formatTime(announcement.updatedAt)}
-          </div>
-        ` : ''}
       </div>
     `;
     
@@ -323,7 +319,8 @@
     }
 
     // Show edit form if no announcement or if editing
-    if (forceEdit || !announcement || !announcement.text) {
+    // Note: Check for announcement existence, not just text (empty text is valid)
+    if (forceEdit || !announcement) {
       announcementBox = createEditForm(announcement);
     } else {
       announcementBox = createDisplayBox(announcement);
@@ -382,6 +379,11 @@
           console.error('Error setting up realtime subscription:', e);
         }
       }
+
+      // Fallback: Poll for updates every 5 seconds
+      setInterval(() => {
+        renderAnnouncementBox();
+      }, 5000);
 
       // Listen for localStorage updates (fallback)
       window.addEventListener('storage', (e) => {
