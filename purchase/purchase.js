@@ -2095,6 +2095,15 @@ function migrateItemToV2(item) {
     if (!item.statusTimestamps) item.statusTimestamps = {};
     if (!item.qualityCheck) item.qualityCheck = null;
     
+    // Preserve nickname fields if they exist
+    // These are stored locally and not in database, so preserve them during migration
+    if (item.updated_by_nickname === undefined && item.updated_by_nickname === null) {
+        // Keep existing value if present
+    }
+    if (item.created_by_nickname === undefined && item.created_by_nickname === null) {
+        // Keep existing value if present
+    }
+    
     // Set current status timestamp if not exists
     if (!item.statusTimestamps[item.status]) {
         item.statusTimestamps[item.status] = item.lastUpdated || Date.now();
@@ -3392,9 +3401,10 @@ function editItem(itemId) {
     // Show last edited by nickname
     const lastEditedBy = item.updated_by_nickname || item.created_by_nickname || null;
     const lastEditedByElement = document.getElementById('editItemLastEditedBy');
-    if (lastEditedByElement) {
+    const lastEditedByNicknameElement = document.getElementById('editItemLastEditedByNickname');
+    if (lastEditedByElement && lastEditedByNicknameElement) {
         if (lastEditedBy) {
-            lastEditedByElement.textContent = `แก้ไขล่าสุดโดย: ${lastEditedBy}`;
+            lastEditedByNicknameElement.textContent = lastEditedBy;
             lastEditedByElement.style.display = 'block';
         } else {
             lastEditedByElement.style.display = 'none';
@@ -3458,19 +3468,11 @@ async function handleEditItem(event) {
     item.urgency = document.getElementById('editItemUrgency').checked ? 'urgent' : 'normal';
     item.notes = document.getElementById('editItemNotes').value.trim() || null;
     item.lastUpdated = Date.now();
-
-    console.log('✏️ Item edited:', {
-        id: item.id,
-        name: item.name,
-        oldName: oldName,
-        quantity: item.requested_qty,
-        unit: item.unit,
-        supplier: item.supplier,
-        urgency: item.urgency,
-        oldUrgency: oldUrgency,
-        status: item.status,
-        user: currentUser?.nickname || 'Unknown'
-    });
+    
+    // Update last edited by nickname
+    if (currentUser?.nickname) {
+        item.updated_by_nickname = currentUser.nickname;
+    }
 
     // Track history for significant changes
     if (oldName !== item.name) {
