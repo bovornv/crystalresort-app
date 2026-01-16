@@ -1319,7 +1319,7 @@ const translations = {
         
         // Board columns
         'needToBuy': 'ขั้นที่0: เตรียมสั่ง',
-        'ordered': 'ขั้นที่1: พร้อมสั่งซื้อ',
+        'ordered': 'ขั้นที่1: รายการจริง พร้อมสั่ง',
         'bought': 'ขั้นที่2: ซื้อแล้ว / กำลังขนส่ง',
         'received': 'รับแล้ว',
         'verified': 'มีปัญหา',
@@ -4270,37 +4270,40 @@ async function handleReceiveSelected() {
     if (!requireAuth(() => true)) return;
     
     // If items are selected, use them; otherwise find eligible items
+    // Only items with status 'bought' can be received
     let eligibleItems = [];
     
     if (selectedItems.size > 0) {
         const selectedItemIds = Array.from(selectedItems);
         eligibleItems = selectedItemIds
             .map(id => items.find(item => item.id === id))
-            .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+            .filter(item => item && item.status === 'bought');
     } else {
-        // No selection - find all eligible items
+        // No selection - find all eligible items (only 'bought' status)
         eligibleItems = items.filter(item => 
-            item && (item.status === 'bought' || item.status === 'ordered')
+            item && item.status === 'bought'
         );
     }
     
     if (eligibleItems.length === 0) {
-        showNotification(t('noEligibleItems') || 'No eligible items found. Items must be in "Bought" or "Ordered" status.', 'info');
+        showNotification(t('noEligibleItems') || 'No eligible items found. Items must be in "Bought" status to receive.', 'info');
         return;
     }
     
-    // If single item, show modal; if multiple, process all
+    // If single item, process it
     if (eligibleItems.length === 1) {
         const item = eligibleItems[0];
-        if (item.status === 'bought' && !item.issue) {
+        if (!item.issue) {
+            // Quick receive for items without issues
             await quickReceive(item.id);
         } else {
+            // Show receiving modal for items with existing issues
             showReceivingModal(item.id);
         }
     } else {
-        // Process multiple items - show modal for first one
+        // Process multiple items - quick receive first item if no issues
         const firstItem = eligibleItems[0];
-        if (firstItem.status === 'bought' && !firstItem.issue) {
+        if (!firstItem.issue) {
             await quickReceive(firstItem.id);
         } else {
             showReceivingModal(firstItem.id);
@@ -4318,32 +4321,29 @@ function handleIssueSelected() {
     if (!requireAuth(() => true)) return;
     
     // If items are selected, use them; otherwise find eligible items
+    // Only items with status 'bought' can have issues reported
     let eligibleItems = [];
     
     if (selectedItems.size > 0) {
         const selectedItemIds = Array.from(selectedItems);
         eligibleItems = selectedItemIds
             .map(id => items.find(item => item.id === id))
-            .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+            .filter(item => item && item.status === 'bought');
     } else {
-        // No selection - find all eligible items
+        // No selection - find all eligible items (only 'bought' status)
         eligibleItems = items.filter(item => 
-            item && (item.status === 'bought' || item.status === 'ordered')
+            item && item.status === 'bought'
         );
     }
     
     if (eligibleItems.length === 0) {
-        showNotification(t('noEligibleItems') || 'No eligible items found. Items must be in "Bought" or "Ordered" status.', 'info');
+        showNotification(t('noEligibleItems') || 'No eligible items found. Items must be in "Bought" status to report issues.', 'info');
         return;
     }
     
     // Show issue modal for first eligible item
     const firstItem = eligibleItems[0];
-    if (firstItem.status === 'bought') {
-        showQuickIssueSheet(firstItem.id);
-    } else {
-        showReceivingModal(firstItem.id);
-    }
+    showQuickIssueSheet(firstItem.id);
     
     // Note: Selection is kept so user can process multiple items if needed
     // Clear selection after modal closes (handled in modal close handlers)
