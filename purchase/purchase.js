@@ -2869,7 +2869,8 @@ function renderBoard() {
     // updateTopBarStats(); // Removed - stat badges were deleted
     
     // Show alerts for urgent/delayed items
-    showUrgentAlerts();
+    // DISABLED: Urgent warning bar disabled per requirements
+    // showUrgentAlerts();
 }
 
 // Show visual alerts for urgent/delayed items (using shared dashboard data)
