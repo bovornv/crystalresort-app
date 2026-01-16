@@ -772,6 +772,11 @@ class RealtimeManager {
         this.isStarted = false;
         this.isReconnecting = false;
         this.channelId = null;  // Unique ID for this session's channels
+        
+        // Retry rate limiting
+        this.lastRetryTime = 0;
+        this.retryCount = 0;
+        this.maxRetryDelay = 10000; // 10 seconds between retries
     }
     
     /**
@@ -863,6 +868,8 @@ class RealtimeManager {
         this.channelId = null;
         // Sync global flag
         realtimeSubscribed = false;
+        // Reset retry tracking when stopped
+        this.retryCount = 0;
         
         console.log('🛑 RealtimeManager stopped');
     }
@@ -889,6 +896,73 @@ class RealtimeManager {
      */
     _hasAnyChannels() {
         return Object.values(this.channels).some(channel => channel !== null);
+    }
+    
+    /**
+     * Handle channel subscription status events
+     * Properly handles SUBSCRIBED, TIMED_OUT, CLOSED, CHANNEL_ERROR
+     * @private
+     * @param {string} channelName - Name of the channel (e.g., 'purchase_items', 'purchase_history', 'presence')
+     * @param {string} status - Subscription status
+     * @param {Error} err - Error object if status is error
+     */
+    _handleChannelStatus(channelName, status, err) {
+        const channelLabel = `[${channelName}]`;
+        
+        if (status === 'SUBSCRIBED') {
+            // Success - sync global flags
+            realtimeSubscribed = true;
+            this.isStarted = true;
+            this.isReconnecting = false;
+            isReconnecting = false;
+            this.retryCount = 0; // Reset retry count on success
+            console.log(`✅ ${channelLabel} SUBSCRIBED`);
+        } else if (status === 'TIMED_OUT') {
+            // Timeout - log but don't retry immediately (may recover on its own)
+            console.warn(`⏱️ ${channelLabel} TIMED_OUT - waiting for recovery`);
+            // Don't call stop() for timeout - channel may recover
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            // Critical errors - must stop and retry
+            console.error(`❌ ${channelLabel} ${status}`, err || '');
+            
+            // Log helpful error details
+            if (err) {
+                if (err.message && err.message.includes('permission denied')) {
+                    console.error(`⚠️ ${channelLabel} RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.`);
+                }
+                if (err.message && err.message.includes('publication')) {
+                    console.error(`⚠️ ${channelLabel} Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE ${channelName};" in Supabase SQL Editor.`);
+                }
+            }
+            
+            // CRITICAL: Stop all channels before retrying (prevents duplicate channels)
+            this.stop();
+            
+            // Rate-limited retry: max 1 retry every 10 seconds
+            const now = Date.now();
+            const timeSinceLastRetry = now - this.lastRetryTime;
+            
+            if (timeSinceLastRetry >= this.maxRetryDelay && this.retryCount < 1) {
+                this.retryCount++;
+                this.lastRetryTime = now;
+                console.log(`🔄 ${channelLabel} Retrying start() (attempt ${this.retryCount}/1)...`);
+                
+                // Retry with short delay (2 seconds)
+                setTimeout(() => {
+                    if (checkSupabaseConfig() && !this.isStarted) {
+                        this.start();
+                    }
+                }, 2000);
+            } else if (this.retryCount >= 1) {
+                console.warn(`⚠️ ${channelLabel} Max retries reached. Manual restart required.`);
+            } else {
+                const waitTime = Math.ceil((this.maxRetryDelay - timeSinceLastRetry) / 1000);
+                console.log(`⏳ ${channelLabel} Rate limited - waiting ${waitTime}s before retry...`);
+            }
+        } else {
+            // Unknown status - log for debugging
+            console.log(`ℹ️ ${channelLabel} Status: ${status}`, err || '');
+        }
     }
     
     /**
@@ -1035,43 +1109,7 @@ class RealtimeManager {
                 }
             )
             .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    // Sync global flag with manager state
-                    realtimeSubscribed = true;
-                    this.isStarted = true;
-                    this.isReconnecting = false;
-                    isReconnecting = false;
-                    console.log('✅ Real-time subscribed: purchase_items');
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                    realtimeSubscribed = false;
-                    // Only log error if not already reconnecting (to reduce console spam)
-                    if (!this.isReconnecting && !isReconnecting) {
-                        console.error('❌ Real-time subscription error:', status, err);
-                        if (err) {
-                            console.error('Error details:', err);
-                            // Common issues:
-                            if (err.message && err.message.includes('permission denied')) {
-                                console.error('⚠️ RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.');
-                            }
-                            if (err.message && err.message.includes('publication')) {
-                                console.error('⚠️ Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;" in Supabase SQL Editor.');
-                            }
-                        }
-                    }
-                    // Attempt to reconnect after a delay (only if not already reconnecting)
-                    if (!this.isReconnecting && !isReconnecting) {
-                        this.isReconnecting = true;
-                        isReconnecting = true;
-                        setTimeout(() => {
-                            this.isReconnecting = false;
-                            isReconnecting = false;
-                            if (checkSupabaseConfig() && !this.isStarted) {
-                                // Auto-reconnect via manager (idempotent)
-                                realtimeManager.start();
-                            }
-                        }, 5000);
-                    }
-                }
+                this._handleChannelStatus('purchase_items', status, err);
             });
         
         this.channels.items = itemsChannel;
@@ -1130,32 +1168,7 @@ class RealtimeManager {
                 }
             )
             .subscribe((status, err) => {
-                if (status === 'SUBSCRIBED') {
-                    // Sync global flag with manager state
-                    realtimeSubscribed = true;
-                    this.isStarted = true;
-                    this.isReconnecting = false;
-                    isReconnecting = false;
-                    console.log('✅ Real-time subscribed: purchase_history');
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                    // Only log error if not already reconnecting (to reduce console spam)
-                    if (!this.isReconnecting && !isReconnecting) {
-                        console.error('❌ purchase_history subscription error:', status, err);
-                    }
-                    // Attempt to reconnect after a delay (only if not already reconnecting)
-                    if (!this.isReconnecting && !isReconnecting) {
-                        this.isReconnecting = true;
-                        isReconnecting = true;
-                        setTimeout(() => {
-                            this.isReconnecting = false;
-                            isReconnecting = false;
-                            if (checkSupabaseConfig() && !this.isStarted) {
-                                // Auto-reconnect via manager (idempotent)
-                                realtimeManager.start();
-                            }
-                        }, 5000);
-                    }
-                }
+                this._handleChannelStatus('purchase_history', status, err);
             });
         
         this.channels.history = purchaseChannel;
@@ -1179,7 +1192,9 @@ class RealtimeManager {
                     updatePresenceIndicator();
                 }
             )
-            .subscribe();
+            .subscribe((status, err) => {
+                this._handleChannelStatus('presence', status, err);
+            });
         
         this.channels.presence = presenceChannel;
     }
