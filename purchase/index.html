@@ -648,6 +648,34 @@
         </div>
     </div>
 
+    <!-- Received Items Modal -->
+    <div id="receivedItemsModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <div>
+                    <h2>ของที่เพิ่งรับมาถูกต้อง</h2>
+                    <p style="font-size: 14px; color: #787774; margin: 4px 0 0 0;">รายการสินค้าที่รับของเรียบร้อยแล้ว</p>
+                </div>
+                <button class="close-btn" onclick="closeReceivedItemsModal()">&times;</button>
+            </div>
+            <div class="stats-dashboard" id="receivedItemsContent" style="max-height: calc(100vh - 200px); overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <!-- Issue Items Modal -->
+    <div id="issueItemsModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <div>
+                    <h2>ของที่มีปัญหา</h2>
+                    <p style="font-size: 14px; color: #787774; margin: 4px 0 0 0;">รายการสินค้าที่พบปัญหาในการรับของ</p>
+                </div>
+                <button class="close-btn" onclick="closeIssueItemsModal()">&times;</button>
+            </div>
+            <div class="stats-dashboard" id="issueItemsContent" style="max-height: calc(100vh - 200px); overflow-y: auto;"></div>
+        </div>
+    </div>
+
     <!-- Receiving Checklist Modal -->
     <div id="receivingChecklistModal" class="modal">
         <div class="modal-content modal-large">
