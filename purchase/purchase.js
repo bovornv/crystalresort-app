@@ -98,7 +98,11 @@ async function loadItemsFromSupabase() {
         if (error) throw error;
         return data || [];
     } catch (e) {
-        console.error('Error loading items from Supabase:', e);
+        // Silently fall back to localStorage - don't show error if network fails
+        // Only log if it's not a network error (which is expected in some cases)
+        if (e.message && !e.message.includes('Failed to fetch') && !e.message.includes('NetworkError')) {
+            console.warn('Error loading items from Supabase:', e.message);
+        }
         return null;
     }
 }
@@ -1322,7 +1326,7 @@ const translations = {
         'ordered': 'ขั้นที่1: รายการจริง-พร้อมสั่ง',
         'bought': 'ขั้นที่2: ซื้อแล้ว-กำลังมาส่ง',
         'received': 'รับแล้ว',
-        'verified': 'มีปัญหา',
+        'verified': 'ของที่มีปัญหา',
         
         // Filters
         'searchItems': 'ค้นหารายการ...',
