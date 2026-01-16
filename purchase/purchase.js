@@ -820,6 +820,8 @@ class RealtimeManager {
         this._createPresenceChannel(client);
         
         this.isStarted = true;
+        // Sync global flag
+        realtimeSubscribed = true;
         console.log('✅ RealtimeManager started');
         
         return true;
@@ -859,6 +861,8 @@ class RealtimeManager {
         this.isStarted = false;
         this.isReconnecting = false;
         this.channelId = null;
+        // Sync global flag
+        realtimeSubscribed = false;
         
         console.log('🛑 RealtimeManager stopped');
     }
@@ -1032,7 +1036,9 @@ class RealtimeManager {
             )
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') {
+                    // Sync global flag with manager state
                     realtimeSubscribed = true;
+                    this.isStarted = true;
                     this.isReconnecting = false;
                     isReconnecting = false;
                     console.log('✅ Real-time subscribed: purchase_items');
@@ -1059,9 +1065,9 @@ class RealtimeManager {
                         setTimeout(() => {
                             this.isReconnecting = false;
                             isReconnecting = false;
-                            if (checkSupabaseConfig() && !realtimeSubscribed) {
+                            if (checkSupabaseConfig() && !this.isStarted) {
                                 // Auto-reconnect via manager
-                                this.start();
+                                realtimeManager.start();
                             }
                         }, 5000);
                     }
@@ -1125,6 +1131,9 @@ class RealtimeManager {
             )
             .subscribe((status, err) => {
                 if (status === 'SUBSCRIBED') {
+                    // Sync global flag with manager state
+                    realtimeSubscribed = true;
+                    this.isStarted = true;
                     this.isReconnecting = false;
                     isReconnecting = false;
                     console.log('✅ Real-time subscribed: purchase_history');
@@ -1140,9 +1149,9 @@ class RealtimeManager {
                         setTimeout(() => {
                             this.isReconnecting = false;
                             isReconnecting = false;
-                            if (checkSupabaseConfig() && !realtimeSubscribed) {
+                            if (checkSupabaseConfig() && !this.isStarted) {
                                 // Auto-reconnect via manager
-                                this.start();
+                                realtimeManager.start();
                             }
                         }, 5000);
                     }
@@ -1183,8 +1192,11 @@ const realtimeManager = new RealtimeManager();
 // Setup real-time subscriptions with improved error handling
 // CRITICAL: Only create subscriptions ONCE, after data load
 // CRITICAL: Never recreate subscriptions - check if already subscribed
-// TODO: This function will be replaced with realtimeManager.start() after migration
+// DEPRECATED: This function is replaced by realtimeManager.start()
+// Kept for backward compatibility - redirects to RealtimeManager
 function setupRealtimeSubscriptions() {
+    // Redirect to RealtimeManager
+    return realtimeManager.start();
     if (!checkSupabaseConfig()) {
         return;
     }
@@ -1505,41 +1517,35 @@ function setupRealtimeSubscriptions() {
     realtimeSubscriptions.push(presenceChannel);
 }
 
-// 🔍 AUDIT: RECONNECT CALL #3 - window.addEventListener('online') handler
 // Network status monitoring and lifecycle handling
 // Reconnect real-time on network reconnect
 window.addEventListener('online', () => {
     isOnline = true;
-    if (checkSupabaseConfig() && supabaseClientInstance) {
-        // Reconnect real-time subscriptions if not already subscribed
-        if (!realtimeSubscribed) {
-        // 🔍 AUDIT: RECONNECT CALL #3 - Network online event triggers subscription setup
-        setupRealtimeSubscriptions();
+    if (checkSupabaseConfig() && getSupabaseClient()) {
+        // Reconnect real-time subscriptions if not already started
+        if (!realtimeManager.isStarted) {
+            realtimeManager.start();
         }
         loadData().catch(err => console.error('Error loading data on online:', err));
     }
 });
 
-// 🔍 AUDIT: RECONNECT CALL #4 - document.addEventListener('visibilitychange') handler
 // Handle page visibility changes (mobile backgrounding/foregrounding)
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && checkSupabaseConfig() && supabaseClientInstance) {
+    if (!document.hidden && checkSupabaseConfig() && getSupabaseClient()) {
         // Page became visible - reconnect if needed
-        if (!realtimeSubscribed) {
-            // 🔍 AUDIT: RECONNECT CALL #4 - Page visibility change triggers subscription setup
-            setupRealtimeSubscriptions();
+        if (!realtimeManager.isStarted) {
+            realtimeManager.start();
         }
     }
 });
 
-// 🔍 AUDIT: RECONNECT CALL #5 - window.addEventListener('focus') handler
 // Handle page focus (desktop tab switching)
 window.addEventListener('focus', () => {
-    if (checkSupabaseConfig() && supabaseClientInstance) {
+    if (checkSupabaseConfig() && getSupabaseClient()) {
         // Page focused - reconnect if needed
-        if (!realtimeSubscribed) {
-            // 🔍 AUDIT: RECONNECT CALL #5 - Window focus event triggers subscription setup
-            setupRealtimeSubscriptions();
+        if (!realtimeManager.isStarted) {
+            realtimeManager.start();
         }
     }
 });
@@ -2858,9 +2864,12 @@ async function loadData() {
             loadPurchaseRecords();
         }
         
-        // 🔍 AUDIT: RECONNECT CALL #6 - Inside loadData() function
-        // Setup real-time subscriptions
-        setupRealtimeSubscriptions();
+        // Realtime subscriptions are managed by RealtimeManager
+        // They should be started from DOMContentLoaded, not here
+        // Only start if not already started (defensive check)
+        if (!realtimeManager.isStarted) {
+            realtimeManager.start();
+        }
     } else {
         // Use localStorage fallback (synchronous)
         const stored = localStorage.getItem(STORAGE_KEY);
@@ -7443,29 +7452,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 switchView('board');
                 renderBoard(); // Always render board after data loads
                 
-                // 🔍 AUDIT: RECONNECT CALL #8 - Inside DOMContentLoaded, AFTER loadData() completes
-                // Verify subscriptions are still active (they should be from earlier setup)
-                if (checkSupabaseConfig() && !realtimeSubscribed) {
-                    console.warn('⚠️ Real-time subscriptions not active after data load - reconnecting...');
-                    // 🔍 AUDIT: RECONNECT CALL #8 - After data load, if subscriptions not active
-                    setupRealtimeSubscriptions();
-                }
-                
-                // Verify Supabase connection and real-time sync (check after a delay to allow subscriptions to establish)
+                // Verify realtime subscriptions status (check after a delay to allow subscriptions to establish)
                 setTimeout(() => {
                     if (checkSupabaseConfig()) {
                         console.log('✅ Supabase configured - real-time sync should work');
                         console.log('📊 Current items count:', items.length);
-                        if (realtimeSubscribed) {
+                        if (realtimeManager.isStarted) {
                             console.log('✅ Real-time subscriptions active');
                         } else {
-                            console.warn('⚠️ Real-time subscriptions not active - attempting to reconnect...');
-                            // 🔍 AUDIT: RECONNECT CALL #9 - Inside DOMContentLoaded timeout (2 seconds after loadData)
-                            // Try to reconnect
-                            setupRealtimeSubscriptions();
+                            console.warn('⚠️ Real-time subscriptions not active - attempting to start...');
+                            // Defensive: try to start if not already started
+                            realtimeManager.start();
                             setTimeout(() => {
-                                if (realtimeSubscribed) {
-                                    console.log('✅ Real-time subscriptions reconnected');
+                                if (realtimeManager.isStarted) {
+                                    console.log('✅ Real-time subscriptions started');
                                 } else {
                                     console.warn('⚠️ Real-time subscriptions still not active - sync may not work');
                                     console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
