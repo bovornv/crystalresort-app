@@ -756,24 +756,33 @@ function setupRealtimeSubscriptions() {
                 }
                 
                 if (payload.eventType === 'INSERT') {
-                    // Real-time INSERT → add item to state
+                    // Real-time INSERT → add item to state (from any device/nickname)
                     const newItem = migrateItemToV2(payload.new);
                     newItem._fromRealtime = true; // Mark to prevent echo save
                     
-                    // Only add if it has a valid name
-                    const hasValidName = newItem.name && 
-                                       newItem.name.trim() !== '' && 
-                                       newItem.name !== 'Unknown Item';
-                    if (hasValidName) {
-                        items.push(newItem);
-                        // Log operation once
-                        if (!window.realtimeInsertLogged) {
-                            console.log(`✅ Remote INSERT: ${newItem.id} - ${newItem.name}`);
-                            window.realtimeInsertLogged = true;
+                    // Check if item already exists (might have been added locally)
+                    const exists = items.findIndex(i => i.id === newItem.id) >= 0;
+                    if (exists) {
+                        // Item already exists - treat as UPDATE instead
+                        const index = items.findIndex(i => i.id === newItem.id);
+                        items[index] = {
+                            ...items[index],
+                            ...newItem,
+                            _fromRealtime: true
+                        };
+                    } else {
+                        // New item - add it
+                        const hasValidName = newItem.name && 
+                                           newItem.name.trim() !== '' && 
+                                           newItem.name !== 'Unknown Item';
+                        if (hasValidName) {
+                            items.push(newItem);
                         }
-                        renderBoard();
-                        updatePresenceIndicator();
                     }
+                    
+                    // Always re-render to reflect changes
+                    renderBoard();
+                    updatePresenceIndicator();
                 } else if (payload.eventType === 'UPDATE') {
                     // Real-time UPDATE → ALWAYS accept as source of truth
                     const updatedItem = migrateItemToV2(payload.new);
