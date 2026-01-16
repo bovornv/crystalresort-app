@@ -3629,6 +3629,11 @@ function closeReceivingModal() {
     const modal = document.getElementById('receivingModal');
     modal.classList.remove('active');
     document.getElementById('receivingForm').reset();
+    
+    // Clear selection after modal closes
+    selectedItems.clear();
+    updateActionButtonStates();
+    renderBoard();
 }
 
 // Quick Receive - Instant verify (mobile only)
@@ -4238,6 +4243,102 @@ function updateBulkActionsButton() {
         btn.textContent = `⚡ Actions (${count})`;
         btn.style.display = count > 0 ? 'inline-block' : 'none';
     }
+}
+
+// Update action button states (receive/issue buttons)
+function updateActionButtonStates() {
+    const receiveBtn = document.getElementById('receiveBtn');
+    const issueBtn = document.getElementById('issueBtn');
+    const hasSelection = selectedItems.size > 0;
+    
+    if (receiveBtn) {
+        receiveBtn.disabled = !hasSelection;
+        receiveBtn.style.opacity = hasSelection ? '1' : '0.5';
+        receiveBtn.style.cursor = hasSelection ? 'pointer' : 'not-allowed';
+    }
+    
+    if (issueBtn) {
+        issueBtn.disabled = !hasSelection;
+        issueBtn.style.opacity = hasSelection ? '1' : '0.5';
+        issueBtn.style.cursor = hasSelection ? 'pointer' : 'not-allowed';
+    }
+}
+
+// Handle receive action for selected items
+async function handleReceiveSelected() {
+    if (!requireAuth(() => true)) return;
+    
+    if (selectedItems.size === 0) {
+        showNotification(t('selectItemsFirst') || 'Please select items first', 'info');
+        return;
+    }
+    
+    const selectedItemIds = Array.from(selectedItems);
+    const eligibleItems = selectedItemIds
+        .map(id => items.find(item => item.id === id))
+        .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+    
+    if (eligibleItems.length === 0) {
+        showNotification(t('noEligibleItems') || 'No eligible items selected. Items must be in "Bought" or "Ordered" status.', 'info');
+        return;
+    }
+    
+    // If single item, show modal; if multiple, process all
+    if (eligibleItems.length === 1) {
+        const item = eligibleItems[0];
+        if (item.status === 'bought' && !item.issue) {
+            await quickReceive(item.id);
+        } else {
+            showReceivingModal(item.id);
+        }
+    } else {
+        // Process multiple items
+        for (const item of eligibleItems) {
+            if (item.status === 'bought' && !item.issue) {
+                await quickReceive(item.id);
+            } else {
+                // For items that need full receive flow, show modal for first one
+                showReceivingModal(item.id);
+                break; // Only show modal for first item
+            }
+        }
+    }
+    
+    // Clear selection after processing
+    selectedItems.clear();
+    updateActionButtonStates();
+    renderBoard();
+}
+
+// Handle issue action for selected items
+function handleIssueSelected() {
+    if (!requireAuth(() => true)) return;
+    
+    if (selectedItems.size === 0) {
+        showNotification(t('selectItemsFirst') || 'Please select items first', 'info');
+        return;
+    }
+    
+    const selectedItemIds = Array.from(selectedItems);
+    const eligibleItems = selectedItemIds
+        .map(id => items.find(item => item.id === id))
+        .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+    
+    if (eligibleItems.length === 0) {
+        showNotification(t('noEligibleItems') || 'No eligible items selected. Items must be in "Bought" or "Ordered" status.', 'info');
+        return;
+    }
+    
+    // Show issue modal for first selected item
+    const firstItem = eligibleItems[0];
+    if (firstItem.status === 'bought') {
+        showQuickIssueSheet(firstItem.id);
+    } else {
+        showReceivingModal(firstItem.id);
+    }
+    
+    // Note: Selection is kept so user can process multiple items if needed
+    // Clear selection after modal closes (handled in modal close handlers)
 }
 
 function showBulkActions() {
