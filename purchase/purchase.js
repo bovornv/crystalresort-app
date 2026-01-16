@@ -7108,7 +7108,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // BEFORE loading data - this ensures we don't miss any updates
     if (checkSupabaseConfig() && wasLoggedIn) {
         console.log('🔄 Setting up real-time subscriptions BEFORE data load...');
-        setupRealtimeSubscriptions();
+        realtimeManager.start();
     }
     
     if (!wasLoggedIn) {
