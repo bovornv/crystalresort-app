@@ -732,12 +732,24 @@ function setupRealtimeSubscriptions() {
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                 realtimeSubscribed = false;
                 console.error('❌ Real-time subscription error:', status, err);
+                if (err) {
+                    console.error('Error details:', err);
+                    // Common issues:
+                    if (err.message && err.message.includes('permission denied')) {
+                        console.error('⚠️ RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.');
+                    }
+                    if (err.message && err.message.includes('publication')) {
+                        console.error('⚠️ Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;" in Supabase SQL Editor.');
+                    }
+                }
                 // Attempt to reconnect after a delay
                 setTimeout(() => {
                     if (checkSupabaseConfig()) {
                         setupRealtimeSubscriptions();
                     }
                 }, 5000);
+            } else {
+                console.log('🔄 Real-time subscription status:', status);
             }
         });
     
