@@ -6912,6 +6912,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 switchView('board');
                 renderBoard(); // Always render board after data loads
                 
+                // Ensure real-time subscriptions are active
+                if (checkSupabaseConfig() && !realtimeSubscribed) {
+                    console.log('🔄 Setting up real-time subscriptions...');
+                    setupRealtimeSubscriptions();
+                }
+                
                 // Verify Supabase connection and real-time sync (check after a delay to allow subscriptions to establish)
                 setTimeout(() => {
                     if (checkSupabaseConfig()) {
@@ -6920,8 +6926,17 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (realtimeSubscribed) {
                             console.log('✅ Real-time subscriptions active');
                         } else {
-                            console.warn('⚠️ Real-time subscriptions not active - sync may not work');
-                            console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
+                            console.warn('⚠️ Real-time subscriptions not active - attempting to reconnect...');
+                            // Try to reconnect
+                            setupRealtimeSubscriptions();
+                            setTimeout(() => {
+                                if (realtimeSubscribed) {
+                                    console.log('✅ Real-time subscriptions reconnected');
+                                } else {
+                                    console.warn('⚠️ Real-time subscriptions still not active - sync may not work');
+                                    console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
+                                }
+                            }, 3000);
                         }
                     } else {
                         console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
