@@ -1066,7 +1066,7 @@ class RealtimeManager {
                             this.isReconnecting = false;
                             isReconnecting = false;
                             if (checkSupabaseConfig() && !this.isStarted) {
-                                // Auto-reconnect via manager
+                                // Auto-reconnect via manager (idempotent)
                                 realtimeManager.start();
                             }
                         }, 5000);
@@ -1150,7 +1150,7 @@ class RealtimeManager {
                             this.isReconnecting = false;
                             isReconnecting = false;
                             if (checkSupabaseConfig() && !this.isStarted) {
-                                // Auto-reconnect via manager
+                                // Auto-reconnect via manager (idempotent)
                                 realtimeManager.start();
                             }
                         }, 5000);
