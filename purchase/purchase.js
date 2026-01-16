@@ -3814,11 +3814,25 @@ async function handleEditItem(event) {
 
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item, 'user');
+        try {
+            await saveItemToSupabase(item, 'user');
+        } catch (error) {
+            console.error('❌ Error saving item to Supabase:', error);
+            // Fallback to localStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
+        }
+    } else {
+        // Fallback to localStorage only if Supabase not configured
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        } catch (e) {
+            console.error('Error saving to localStorage:', e);
+        }
     }
-
-    // Save data (fire-and-forget, don't await to avoid blocking UI)
-    saveData().catch(err => console.error('Error saving data:', err));
     renderBoard();
     closeEditItemModal();
     showNotification(t('itemUpdatedSuccess'), 'success');
@@ -3920,11 +3934,25 @@ async function quickReceive(itemId) {
     
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item, 'user');
+        try {
+            await saveItemToSupabase(item, 'user');
+        } catch (error) {
+            console.error('❌ Error saving item to Supabase:', error);
+            // Fallback to localStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
+        }
+    } else {
+        // Fallback to localStorage only if Supabase not configured
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        } catch (e) {
+            console.error('Error saving to localStorage:', e);
+        }
     }
-    
-    // Save data (fire-and-forget, don't await to avoid blocking UI)
-    saveData().catch(err => console.error('Error saving data:', err));
     renderBoard();
     
     // Show undo option for 5 seconds
@@ -4096,11 +4124,25 @@ async function handleQuickIssue(event) {
     
     // Save to Supabase if configured
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item, 'user');
+        try {
+            await saveItemToSupabase(item, 'user');
+        } catch (error) {
+            console.error('❌ Error saving item to Supabase:', error);
+            // Fallback to localStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
+        }
+    } else {
+        // Fallback to localStorage only if Supabase not configured
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        } catch (e) {
+            console.error('Error saving to localStorage:', e);
+        }
     }
-    
-    // Save data (fire-and-forget, don't await to avoid blocking UI)
-    saveData().catch(err => console.error('Error saving data:', err));
     renderBoard();
     closeQuickIssueSheet();
     showNotification(`${t('issues')}: ${issueTypeLabel}`, 'error');
