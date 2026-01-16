@@ -64,6 +64,7 @@ let syncInProgress = false;
 let realtimeSubscriptions = [];
 let realtimeSubscribed = false; // Track if subscriptions are active
 let useSupabase = false;
+let isReconnecting = false; // Prevent multiple reconnection attempts
 
 // Generate unique client ID to prevent feedback loops
 // This ID is used to tag local updates and ignore our own real-time events
@@ -562,12 +563,18 @@ function setupRealtimeSubscriptions() {
         return;
     }
     
+    // Prevent duplicate subscriptions and reconnection loops
+    if (isReconnecting) {
+        return; // Already reconnecting, don't start another attempt
+    }
+    
     // Prevent duplicate subscriptions - check if channels are still active
     // But allow reconnection if channels are closed/errored
     const hasActiveSubscriptions = realtimeSubscriptions.length > 0 && 
         realtimeSubscriptions.some(sub => {
             try {
-                return sub.state === 'joined' || sub.state === 'joining';
+                const state = sub.state;
+                return state === 'joined' || state === 'joining';
             } catch (e) {
                 return false;
             }
@@ -588,10 +595,13 @@ function setupRealtimeSubscriptions() {
     realtimeSubscriptions = [];
     realtimeSubscribed = false;
     
+    // Use unique channel names to avoid conflicts
+    const channelId = Math.random().toString(36).substr(2, 9);
+    
     // Subscribe to purchase_items changes (realtime updates for active board)
     // This enables instant updates across all devices when items are added/updated/deleted
     const itemsChannel = supabaseClientInstance
-        .channel('purchase-items-changes', {
+        .channel(`purchase-items-${channelId}`, {
             config: {
                 broadcast: { self: true }
             }
@@ -729,28 +739,37 @@ function setupRealtimeSubscriptions() {
         .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
                 realtimeSubscribed = true;
+                isReconnecting = false;
                 console.log('✅ Real-time subscribed: purchase_items');
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                 realtimeSubscribed = false;
-                console.error('❌ Real-time subscription error:', status, err);
-                if (err) {
-                    console.error('Error details:', err);
-                    // Common issues:
-                    if (err.message && err.message.includes('permission denied')) {
-                        console.error('⚠️ RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.');
-                    }
-                    if (err.message && err.message.includes('publication')) {
-                        console.error('⚠️ Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;" in Supabase SQL Editor.');
+                // Only log error if not already reconnecting (to reduce console spam)
+                if (!isReconnecting) {
+                    console.error('❌ Real-time subscription error:', status, err);
+                    if (err) {
+                        console.error('Error details:', err);
+                        // Common issues:
+                        if (err.message && err.message.includes('permission denied')) {
+                            console.error('⚠️ RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.');
+                        }
+                        if (err.message && err.message.includes('publication')) {
+                            console.error('⚠️ Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;" in Supabase SQL Editor.');
+                        }
                     }
                 }
-                // Attempt to reconnect after a delay
-                setTimeout(() => {
-                    if (checkSupabaseConfig()) {
-                        setupRealtimeSubscriptions();
-                    }
-                }, 5000);
+                // Attempt to reconnect after a delay (only if not already reconnecting)
+                if (!isReconnecting) {
+                    isReconnecting = true;
+                    setTimeout(() => {
+                        isReconnecting = false;
+                        if (checkSupabaseConfig() && !realtimeSubscribed) {
+                            setupRealtimeSubscriptions();
+                        }
+                    }, 5000);
+                }
             } else {
-                console.log('🔄 Real-time subscription status:', status);
+                // Only log non-error status changes if debugging
+                // console.log('🔄 Real-time subscription status:', status);
             }
         });
     
@@ -759,7 +778,7 @@ function setupRealtimeSubscriptions() {
     // Subscribe to purchase_history changes (immutable records)
     // This updates the history view when new records are added
     const purchaseChannel = supabaseClientInstance
-        .channel('purchase-history-changes', {
+        .channel(`purchase-history-${channelId}`, {
             config: {
                 broadcast: { self: true }
             }
@@ -804,15 +823,23 @@ function setupRealtimeSubscriptions() {
         )
         .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
+                isReconnecting = false;
                 console.log('✅ Real-time subscribed: purchase_history');
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                console.error('❌ purchase_history subscription error:', status, err);
-                // Attempt to reconnect after a delay
-                setTimeout(() => {
-                    if (checkSupabaseConfig()) {
-                        setupRealtimeSubscriptions();
-                    }
-                }, 5000);
+                // Only log error if not already reconnecting (to reduce console spam)
+                if (!isReconnecting) {
+                    console.error('❌ purchase_history subscription error:', status, err);
+                }
+                // Attempt to reconnect after a delay (only if not already reconnecting)
+                if (!isReconnecting) {
+                    isReconnecting = true;
+                    setTimeout(() => {
+                        isReconnecting = false;
+                        if (checkSupabaseConfig() && !realtimeSubscribed) {
+                            setupRealtimeSubscriptions();
+                        }
+                    }, 5000);
+                }
             }
         });
     
