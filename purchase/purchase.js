@@ -3824,6 +3824,11 @@ function closeQuickIssueSheet() {
     updateActionButtonStates();
     renderBoard();
 }
+    // Clear selection after modal closes
+    selectedItems.clear();
+    updateActionButtonStates();
+    renderBoard();
+}
 
 // Handle Quick Issue submission
 async function handleQuickIssue(event) {
