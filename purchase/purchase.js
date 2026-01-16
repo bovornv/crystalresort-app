@@ -181,9 +181,11 @@ function getUserRole(nickname) {
 }
 
 // Set role for a nickname (admin only)
+// TEMPORARY: All logged-in users can change roles (UI-only change, reversible)
 function setUserRole(nickname, role) {
-    if (!isAdmin()) {
-        showNotification('Only admins can change user roles', 'error');
+    // Permission check removed - full access granted to all logged-in users
+    if (!isLoggedIn()) {
+        showNotification('Please log in to change user roles', 'error');
         return false;
     }
     if (!['admin', 'manager', 'staff'].includes(role)) {
@@ -1446,13 +1448,15 @@ function isLoggedIn() {
 }
 
 // Check if user has admin/manager role
+// TEMPORARY: All logged-in users have full access (UI-only change, reversible)
 function isAdminOrManager() {
-    return userRole === 'admin' || userRole === 'manager';
+    return isLoggedIn(); // Grant full access to any logged-in user
 }
 
 // Check if user is admin
+// TEMPORARY: All logged-in users have full access (UI-only change, reversible)
 function isAdmin() {
-    return userRole === 'admin';
+    return isLoggedIn(); // Grant full access to any logged-in user
 }
 
 // Get user initials for display
@@ -4578,11 +4582,8 @@ async function moveItem(itemId, newStatus) {
 async function deleteItem(itemId) {
     if (!requireAuth(() => true)) return;
     
-    // Only admin and manager can delete items
-    if (!isAdminOrManager()) {
-        showNotification('Only admins and managers can delete items', 'error');
-        return;
-    }
+    // TEMPORARY: All logged-in users can delete items (UI-only change, reversible)
+    // Permission check removed - full access granted
     
     if (confirm(t('confirmDeleteItem'))) {
         const item = items.find(i => i.id === itemId);
@@ -5186,11 +5187,8 @@ function showStatsModal() {
         return;
     }
     
-    // Only admin and manager can view purchase history
-    if (!isAdminOrManager()) {
-        showNotification('Only admins and managers can view purchase history', 'error');
-        return;
-    }
+    // TEMPORARY: All logged-in users can view purchase history (UI-only change, reversible)
+    // Permission check removed - full access granted
     
     try {
         renderStatsDashboard();
@@ -5384,11 +5382,8 @@ function showWeeklyReviewModal() {
         return;
     }
     
-    // Only admin and manager can view weekly review
-    if (!isAdminOrManager()) {
-        showNotification('Only admins and managers can view weekly review', 'error');
-        return;
-    }
+    // TEMPORARY: All logged-in users can view weekly review (UI-only change, reversible)
+    // Permission check removed - full access granted
     
     try {
         renderWeeklyReview();
