@@ -6436,6 +6436,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (boardView) {
             boardView.style.display = 'block';
         }
+        
+        // Initialize action button states
+        updateActionButtonStates();
     
     // Load data (async - will load from Supabase if configured)
         setTimeout(() => {
