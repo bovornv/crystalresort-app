@@ -1062,13 +1062,53 @@ async function handleLogin(event) {
 }
 
 // Handle logout
-async function handleLogout() {
+async function handleLogout(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    // Close dropdown immediately
+    closeUserMenu();
+    
+    // Sign out
     await signOut();
+    
+    // Clear all user UI elements
+    const userMenuContainer = document.getElementById('userMenuContainer');
+    const userMenuNickname = document.getElementById('userMenuNickname');
+    const userMenuName = document.getElementById('userMenuName');
+    const loginBtnTop = document.getElementById('loginBtnTop');
+    
+    // Hide user menu completely
+    if (userMenuContainer) {
+        userMenuContainer.style.display = 'none';
+        userMenuContainer.style.visibility = 'hidden';
+        userMenuContainer.style.opacity = '0';
+    }
+    
+    // Clear nickname text
+    if (userMenuNickname) {
+        userMenuNickname.textContent = '';
+    }
+    if (userMenuName) {
+        userMenuName.textContent = '';
+    }
+    
+    // Show login button
+    if (loginBtnTop) {
+        loginBtnTop.style.display = 'flex';
+        loginBtnTop.style.visibility = 'visible';
+        loginBtnTop.style.opacity = '1';
+    }
+    
+    // Update UI
     updateUserUI();
+    
+    // Show notification and login modal
     showNotification(t('logoutSuccess'), 'info');
     hideAllContent();
     showLoginModal();
-    closeUserMenu();
 }
 
 // Update user UI elements
@@ -1132,6 +1172,9 @@ function updateUserUI() {
             loginBtnTop.style.visibility = 'visible';
             loginBtnTop.style.opacity = '1';
         }
+        // Clear all user-related text
+        if (userMenuNickname) userMenuNickname.textContent = '';
+        if (userMenuName) userMenuName.textContent = '';
         if (currentUserSpan) currentUserSpan.textContent = '';
         
         // Hide app content
