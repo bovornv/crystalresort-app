@@ -987,6 +987,21 @@ class RealtimeManager {
                     // This ensures cross-device sync works for all nicknames
                 },
                 async (payload) => {
+                    // ========================================================================
+                    // CRITICAL: REALTIME HANDLER - READ ONLY
+                    // ========================================================================
+                    // This handler MUST NEVER write to Supabase:
+                    // - NO saveItemToSupabase() calls
+                    // - NO saveData() calls
+                    // - NO insertPurchaseHistory() calls
+                    // - NO savePurchaseRecordToSupabase() calls
+                    // 
+                    // This handler ONLY:
+                    // - Updates local state (items array)
+                    // - Renders UI (renderBoard, renderDashboard, etc.)
+                    // - Marks items with _fromRealtime = true to prevent echo saves
+                    // ========================================================================
+                    
                     // Real-time update - ALWAYS accept as source of truth
                     const itemId = payload.new?.id || payload.old?.id;
                     
@@ -1136,6 +1151,19 @@ class RealtimeManager {
                     // CRITICAL: No filter - subscribe to ALL changes regardless of user/device
                 },
                 (payload) => {
+                    // ========================================================================
+                    // CRITICAL: REALTIME HANDLER - READ ONLY
+                    // ========================================================================
+                    // This handler MUST NEVER write to Supabase:
+                    // - NO savePurchaseRecordToSupabase() calls
+                    // - NO insertPurchaseHistory() calls
+                    // - NO saveData() calls
+                    // 
+                    // This handler ONLY:
+                    // - Updates local state (purchaseRecords array)
+                    // - Renders UI (renderStatsDashboard, updatePresenceIndicator)
+                    // ========================================================================
+                    
                     // Real-time history update - update UI only (silent)
                     if (payload.eventType === 'INSERT') {
                         const record = {
@@ -1189,6 +1217,12 @@ class RealtimeManager {
                     table: 'presence'
                 },
                 () => {
+                    // ========================================================================
+                    // CRITICAL: REALTIME HANDLER - READ ONLY
+                    // ========================================================================
+                    // This handler MUST NEVER write to Supabase
+                    // This handler ONLY updates UI (updatePresenceIndicator)
+                    // ========================================================================
                     updatePresenceIndicator();
                 }
             )
