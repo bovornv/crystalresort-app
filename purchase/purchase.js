@@ -3433,6 +3433,11 @@ function closeEditItemModal() {
     if (urgencyCheckbox) {
         urgencyCheckbox.checked = false;
     }
+    // Hide last edited by field
+    const lastEditedByElement = document.getElementById('editItemLastEditedBy');
+    if (lastEditedByElement) {
+        lastEditedByElement.style.display = 'none';
+    }
 }
 
 // Handle edit item form submission v2
