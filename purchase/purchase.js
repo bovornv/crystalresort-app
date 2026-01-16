@@ -1149,8 +1149,17 @@ function toggleUserMenu(event) {
         event.stopPropagation();
     }
     const dropdown = document.getElementById('userMenuDropdown');
+    const userMenuBtn = document.getElementById('userMenuBtn');
     if (dropdown) {
-        dropdown.classList.toggle('active');
+        const isActive = dropdown.classList.contains('active');
+        // Close all dropdowns first
+        dropdown.classList.remove('active');
+        // Then toggle if it wasn't active
+        if (!isActive) {
+            setTimeout(() => {
+                dropdown.classList.add('active');
+            }, 10);
+        }
     }
 }
 
