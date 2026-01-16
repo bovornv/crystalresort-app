@@ -681,21 +681,17 @@ async function updatePresenceIndicator() {
     // Presence elements removed from UI
 }
 
-// Setup real-time subscriptions with improved error handling
-// CRITICAL: Only create subscriptions ONCE, after data load
-// CRITICAL: Never recreate subscriptions - check if already subscribed
+// Setup real-time subscriptions - ARCHITECTURE: One subscription per table, device-agnostic, user-agnostic
+// CRITICAL: Must be called BEFORE data load to ensure no updates are missed
+// CRITICAL: Only one subscription per table - cleanup old subscriptions before creating new ones
 function setupRealtimeSubscriptions() {
-    if (!checkSupabaseConfig()) {
-        return;
+    // Guard: Must have Supabase client
+    if (!checkSupabaseConfig() || !supabaseClientInstance) {
+        console.warn('⚠️ Cannot setup realtime: Supabase not configured');
+        return false;
     }
     
-    // Prevent duplicate subscriptions and reconnection loops
-    if (isReconnecting) {
-        return; // Already reconnecting, don't start another attempt
-    }
-    
-    // Prevent duplicate subscriptions - check if channels are still active
-    // But allow reconnection if channels are closed/errored
+    // Guard: Prevent duplicate subscriptions - check if already active
     const hasActiveSubscriptions = realtimeSubscriptions.length > 0 && 
         realtimeSubscriptions.some(sub => {
             try {
@@ -707,27 +703,33 @@ function setupRealtimeSubscriptions() {
         });
     
     if (hasActiveSubscriptions && realtimeSubscribed) {
-        return; // Already subscribed and active
+        console.log('✅ Realtime subscriptions already active');
+        return true; // Already subscribed and active
     }
     
-    // Clean up any existing subscriptions first
+    // Guard: Prevent reconnection loops
+    if (isReconnecting) {
+        console.log('⏳ Reconnection already in progress');
+        return false;
+    }
+    
+    console.log('🔄 Setting up realtime subscriptions...');
+    
+    // CRITICAL: Clean up ALL existing subscriptions first to prevent duplicates
     realtimeSubscriptions.forEach(sub => {
         try {
         supabaseClientInstance.removeChannel(sub);
         } catch (e) {
-            // Silent cleanup
+            // Silent cleanup - channel might already be removed
         }
     });
     realtimeSubscriptions = [];
     realtimeSubscribed = false;
     
-    // Use unique channel names to avoid conflicts
-    const channelId = Math.random().toString(36).substr(2, 9);
-    
-    // Subscribe to purchase_items changes (realtime updates for active board)
-    // This enables instant updates across all devices when items are added/updated/deleted
+    // CRITICAL: Use fixed channel name to ensure only one subscription per table
+    // Device-agnostic and user-agnostic - no filtering by user/nickname/device
     const itemsChannel = supabaseClientInstance
-        .channel(`purchase-items-${channelId}`, {
+        .channel('purchase-items', {
             config: {
                 broadcast: { self: true }
             }
@@ -736,8 +738,8 @@ function setupRealtimeSubscriptions() {
             { 
                 event: '*', 
                 schema: 'public', 
-                table: 'purchase_items',
-                filter: undefined
+                table: 'purchase_items'
+                // CRITICAL: No filter - subscribe to ALL changes regardless of user/device/nickname
             },
             async (payload) => {
                 // Real-time update - ALWAYS accept as source of truth
@@ -871,24 +873,35 @@ function setupRealtimeSubscriptions() {
             if (status === 'SUBSCRIBED') {
                 realtimeSubscribed = true;
                 isReconnecting = false;
-                console.log('✅ Real-time subscribed: purchase_items');
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                console.log('✅ Realtime connected: purchase_items');
+            } else if (status === 'CLOSED') {
+                // CLOSED status - channel closed, need to reconnect once
                 realtimeSubscribed = false;
-                // Only log error if not already reconnecting (to reduce console spam)
+                console.warn('⚠️ Realtime CLOSED: purchase_items');
+                
+                // CRITICAL: Reconnect once, not in a loop
                 if (!isReconnecting) {
-                    console.error('❌ Real-time subscription error:', status, err);
-                    if (err) {
-                        console.error('Error details:', err);
-                        // Common issues:
-                        if (err.message && err.message.includes('permission denied')) {
-                            console.error('⚠️ RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.');
+                    isReconnecting = true;
+                    setTimeout(() => {
+                        isReconnecting = false;
+                        if (checkSupabaseConfig() && !realtimeSubscribed) {
+                            console.log('🔄 Reconnecting realtime after CLOSED...');
+                            setupRealtimeSubscriptions();
                         }
-                        if (err.message && err.message.includes('publication')) {
-                            console.error('⚠️ Real-time Not Enabled: Run "ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;" in Supabase SQL Editor.');
-                        }
+                    }, 3000);
+                }
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                realtimeSubscribed = false;
+                console.error(`❌ Realtime error (${status}):`, err);
+                if (err) {
+                    if (err.message && err.message.includes('permission denied')) {
+                        console.error('⚠️ RLS Policy Issue: Run FIX_REALTIME_SYNC.sql');
+                    }
+                    if (err.message && err.message.includes('publication')) {
+                        console.error('⚠️ Real-time Not Enabled: Add tables to supabase_realtime publication');
                     }
                 }
-                // Attempt to reconnect after a delay (only if not already reconnecting)
+                // Reconnect once after error
                 if (!isReconnecting) {
                     isReconnecting = true;
                     setTimeout(() => {
@@ -898,9 +911,6 @@ function setupRealtimeSubscriptions() {
                         }
                     }, 5000);
                 }
-            } else {
-                // Only log non-error status changes if debugging
-                // console.log('🔄 Real-time subscription status:', status);
             }
         });
     
@@ -6917,37 +6927,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 switchView('board');
                 renderBoard(); // Always render board after data loads
                 
-                // Verify subscriptions are still active (they should be from earlier setup)
-                if (checkSupabaseConfig() && !realtimeSubscribed) {
-                    console.warn('⚠️ Real-time subscriptions not active after data load - reconnecting...');
-                    setupRealtimeSubscriptions();
-                }
-                
-                // Verify Supabase connection and real-time sync (check after a delay to allow subscriptions to establish)
+                // Verify subscriptions are active after data load
                 setTimeout(() => {
                     if (checkSupabaseConfig()) {
-                        console.log('✅ Supabase configured - real-time sync should work');
-                        console.log('📊 Current items count:', items.length);
                         if (realtimeSubscribed) {
-                            console.log('✅ Real-time subscriptions active');
+                            console.log('✅ Realtime subscriptions active');
                         } else {
-                            console.warn('⚠️ Real-time subscriptions not active - attempting to reconnect...');
-                            // Try to reconnect
+                            console.warn('⚠️ Realtime subscriptions not active - attempting setup...');
                             setupRealtimeSubscriptions();
-                            setTimeout(() => {
-                                if (realtimeSubscribed) {
-                                    console.log('✅ Real-time subscriptions reconnected');
-                                } else {
-                                    console.warn('⚠️ Real-time subscriptions still not active - sync may not work');
-                                    console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
-                                }
-                            }, 3000);
                         }
-                    } else {
-                        console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
-                        console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
                     }
-                }, 2000); // Wait 2 seconds for subscriptions to establish
+                }, 1000); // Brief delay to allow subscriptions to establish
             }).catch((error) => {
                 // Silently continue even if data load fails
                 loadTemplates();
