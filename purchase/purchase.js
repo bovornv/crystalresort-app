@@ -6263,13 +6263,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Check authentication (matching roomstatus pattern - synchronous)
     const wasLoggedIn = loadUser();
     
+    // Always update UI to show correct login/logout state
+    updateUserUI();
+    
     if (!wasLoggedIn) {
         // User not logged in - hide content, don't auto-show login modal
         hideAllContent();
         // Don't auto-show login modal - user clicks button instead (matching roomstatus)
+        // Login button should be visible (handled by updateUserUI)
     } else {
         // User logged in - show content
-        updateUserUI();
         showAllContent();
         
         // Ensure board view is visible immediately
@@ -6277,8 +6280,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (boardView) {
             boardView.style.display = 'block';
         }
-        
-        // Load data (async - will load from Supabase if configured)
+    
+    // Load data (async - will load from Supabase if configured)
         setTimeout(() => {
             loadData().then(() => {
                 loadTemplates();
