@@ -33,27 +33,35 @@ ALTER PUBLICATION supabase_realtime ADD TABLE purchase_history;
 -- This allows any user (even without Supabase Auth) to read/write data
 -- Since the app uses nickname-based login, we need anonymous policies
 
+-- Drop existing policies first (to avoid conflicts)
+DROP POLICY IF EXISTS "Allow anonymous select" ON purchase_items;
+DROP POLICY IF EXISTS "Allow anonymous insert" ON purchase_items;
+DROP POLICY IF EXISTS "Allow anonymous update" ON purchase_items;
+DROP POLICY IF EXISTS "Allow anonymous delete" ON purchase_items;
+DROP POLICY IF EXISTS "Allow anonymous select history" ON purchase_history;
+DROP POLICY IF EXISTS "Allow anonymous insert history" ON purchase_history;
+
 -- Allow SELECT (required for real-time subscriptions)
-CREATE POLICY IF NOT EXISTS "Allow anonymous select" ON purchase_items
+CREATE POLICY "Allow anonymous select" ON purchase_items
 FOR SELECT USING (true);
 
 -- Allow INSERT (for adding items)
-CREATE POLICY IF NOT EXISTS "Allow anonymous insert" ON purchase_items
+CREATE POLICY "Allow anonymous insert" ON purchase_items
 FOR INSERT WITH CHECK (true);
 
 -- Allow UPDATE (for editing/moving items)
-CREATE POLICY IF NOT EXISTS "Allow anonymous update" ON purchase_items
+CREATE POLICY "Allow anonymous update" ON purchase_items
 FOR UPDATE USING (true) WITH CHECK (true);
 
 -- Allow DELETE (for deleting items)
-CREATE POLICY IF NOT EXISTS "Allow anonymous delete" ON purchase_items
+CREATE POLICY "Allow anonymous delete" ON purchase_items
 FOR DELETE USING (true);
 
 -- Same policies for purchase_history table
-CREATE POLICY IF NOT EXISTS "Allow anonymous select history" ON purchase_history
+CREATE POLICY "Allow anonymous select history" ON purchase_history
 FOR SELECT USING (true);
 
-CREATE POLICY IF NOT EXISTS "Allow anonymous insert history" ON purchase_history
+CREATE POLICY "Allow anonymous insert history" ON purchase_history
 FOR INSERT WITH CHECK (true);
 
 -- ============================================
