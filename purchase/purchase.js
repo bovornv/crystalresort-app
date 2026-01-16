@@ -7,15 +7,82 @@
 const SUPABASE_URL = 'https://kfyjuzmruutgltpytrqm.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmeWp1em1ydXV0Z2x0cHl0cnFtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg0MTA1NTIsImV4cCI6MjA4Mzk4NjU1Mn0.ZP3DYdKc5RZiwOJBqim-yiFD_lJH-SxNYXcJtqV8doo';
 
-// Initialize Supabase client
+// 🔒 SINGLE CLIENT ENFORCEMENT: Store client in window object to survive hot reloads
 // Use a scoped variable name to avoid conflicts with any global supabase variable
+// CRITICAL: Store in window object to prevent duplicate clients on hot reload/re-init
+const CLIENT_STORAGE_KEY = '__crystalresort_purchase_supabase_client__';
 let supabaseClientInstance = null;
+
+// Get or create the single Supabase client instance
+// CRITICAL: This function is idempotent - safe to call multiple times, always returns same instance
+function getSupabaseClient() {
+    // First check: Return existing instance if already created in this execution context
+    if (supabaseClientInstance) {
+        return supabaseClientInstance;
+    }
+    
+    // Second check: Return existing instance from window (survives hot reloads)
+    if (window[CLIENT_STORAGE_KEY]) {
+        supabaseClientInstance = window[CLIENT_STORAGE_KEY];
+        return supabaseClientInstance;
+    }
+    
+    // Third check: Prevent concurrent initialization attempts
+    if (window.__supabaseClientInitializing) {
+        // Another initialization is in progress, wait and retry
+        return new Promise((resolve) => {
+            const checkInterval = setInterval(() => {
+                if (window[CLIENT_STORAGE_KEY]) {
+                    clearInterval(checkInterval);
+                    supabaseClientInstance = window[CLIENT_STORAGE_KEY];
+                    resolve(supabaseClientInstance);
+                } else if (!window.__supabaseClientInitializing) {
+                    // Initialization failed or was cancelled
+                    clearInterval(checkInterval);
+                    resolve(null);
+                }
+            }, 50);
+        });
+    }
+    
+    // No client exists - create it synchronously if possible
+    const supabaseLib = typeof supabase !== 'undefined' ? supabase : (typeof supabaseClient !== 'undefined' ? supabaseClient : null);
+    
+    if (supabaseLib && SUPABASE_URL && SUPABASE_ANON_KEY && 
+        SUPABASE_URL.startsWith('https://') && 
+        SUPABASE_ANON_KEY.startsWith('eyJ')) {
+        try {
+            // Mark initialization in progress
+            window.__supabaseClientInitializing = true;
+            
+            // Create client ONCE - never recreate
+            supabaseClientInstance = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            
+            // Store in window object to survive hot reloads
+            window[CLIENT_STORAGE_KEY] = supabaseClientInstance;
+            
+            // Clear initialization flag
+            window.__supabaseClientInitializing = false;
+            
+            return supabaseClientInstance;
+} catch (e) {
+            window.__supabaseClientInitializing = false;
+            console.error('❌ Error creating Supabase client:', e);
+            return null;
+        }
+    }
+    
+    // Supabase library not loaded yet - return null (caller should retry)
+    return null;
+}
 
 // Function to initialize Supabase client (called after script loads)
 // CRITICAL: Create client ONCE globally, never recreate
+// This function is safe to call multiple times - it will only create one client
 function initializeSupabaseClient() {
     // If client already exists, don't recreate
-    if (supabaseClientInstance) {
+    const existingClient = getSupabaseClient();
+    if (existingClient) {
         return;
     }
     
@@ -25,37 +92,42 @@ function initializeSupabaseClient() {
     // Wait for Supabase script to load
     if (!supabaseLib) {
         // Try again after a short delay (max 50 retries = 5 seconds)
-        if (!window.supabaseInitRetries) window.supabaseInitRetries = 0;
-        if (window.supabaseInitRetries < 50) {
-            window.supabaseInitRetries++;
+        if (!window.__supabaseInitRetries) window.__supabaseInitRetries = 0;
+        if (window.__supabaseInitRetries < 50) {
+            window.__supabaseInitRetries++;
             setTimeout(initializeSupabaseClient, 100);
         } else {
             console.error('❌ Supabase script failed to load after 5 seconds');
+            window.__supabaseInitRetries = 0; // Reset for next attempt
         }
         return;
     }
     
-try {
-    if (SUPABASE_URL && SUPABASE_ANON_KEY && 
-            SUPABASE_URL.startsWith('https://') && 
-            SUPABASE_ANON_KEY.startsWith('eyJ')) {
-            // Create client ONCE - never recreate
-            supabaseClientInstance = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            window.supabaseInitRetries = 0; // Reset retry counter on success
-    }
-} catch (e) {
-        console.error('❌ Error creating Supabase client:', e);
+    // Try to get/create client
+    const client = getSupabaseClient();
+    if (client) {
+        window.__supabaseInitRetries = 0; // Reset retry counter on success
     }
 }
 
 // Initialize after DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function() {
+// CRITICAL: Only register ONE initialization attempt, even if script runs multiple times
+if (!window.__supabaseClientInitRegistered) {
+    window.__supabaseClientInitRegistered = true;
+    
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initializeSupabaseClient, 100);
+        });
+    } else {
+        // DOM already loaded
         setTimeout(initializeSupabaseClient, 100);
-    });
+    }
 } else {
-    // DOM already loaded
-    setTimeout(initializeSupabaseClient, 100);
+    // Initialization already registered - just ensure client exists
+    setTimeout(() => {
+        getSupabaseClient();
+    }, 100);
 }
 
 // Database sync state
@@ -136,8 +208,15 @@ function setUserRole(nickname, role) {
 }
 
 // Check if Supabase is configured (silent check - no logging)
+// CRITICAL: Always use getSupabaseClient() to ensure single instance
 function checkSupabaseConfig() {
-    if (supabaseClientInstance && SUPABASE_URL && SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ')) {
+    // Ensure we have the client instance (may need to initialize)
+    const client = getSupabaseClient();
+    if (client && SUPABASE_URL && SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ')) {
+        // Update local reference if needed
+        if (!supabaseClientInstance) {
+            supabaseClientInstance = client;
+        }
         useSupabase = true;
         return true;
     }
