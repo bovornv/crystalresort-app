@@ -1066,10 +1066,14 @@ async function handleLogout(event) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
     }
     
     // Close dropdown immediately
     closeUserMenu();
+    
+    // Small delay to ensure dropdown closes
+    await new Promise(resolve => setTimeout(resolve, 50));
     
     // Sign out
     await signOut();
@@ -1080,11 +1084,16 @@ async function handleLogout(event) {
     const userMenuName = document.getElementById('userMenuName');
     const loginBtnTop = document.getElementById('loginBtnTop');
     
-    // Hide user menu completely
+    // Hide user menu completely - remove from layout
     if (userMenuContainer) {
         userMenuContainer.style.display = 'none';
         userMenuContainer.style.visibility = 'hidden';
         userMenuContainer.style.opacity = '0';
+        userMenuContainer.style.width = '0';
+        userMenuContainer.style.height = '0';
+        userMenuContainer.style.margin = '0';
+        userMenuContainer.style.padding = '0';
+        userMenuContainer.style.overflow = 'hidden';
     }
     
     // Clear nickname text
@@ -1164,6 +1173,11 @@ function updateUserUI() {
             userMenuContainer.style.display = 'none';
             userMenuContainer.style.visibility = 'hidden';
             userMenuContainer.style.opacity = '0';
+            userMenuContainer.style.width = '0';
+            userMenuContainer.style.height = '0';
+            userMenuContainer.style.margin = '0';
+            userMenuContainer.style.padding = '0';
+            userMenuContainer.style.overflow = 'hidden';
             // Close dropdown if open
             closeUserMenu();
         }
@@ -6365,7 +6379,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Small delay for mobile to prevent immediate closing
                 clearTimeout(clickOutsideTimeout);
                 clickOutsideTimeout = setTimeout(() => {
-                    closeUserMenu();
+            closeUserMenu();
                 }, 150);
             } else {
                 clearTimeout(clickOutsideTimeout);
