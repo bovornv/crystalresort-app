@@ -15,6 +15,7 @@ let supabaseClientInstance = null;
 
 // Get or create the single Supabase client instance
 // CRITICAL: This function is idempotent - safe to call multiple times, always returns same instance
+// CRITICAL: Always returns synchronously (never returns Promise) to maintain compatibility
 function getSupabaseClient() {
     // First check: Return existing instance if already created in this execution context
     if (supabaseClientInstance) {
@@ -27,22 +28,10 @@ function getSupabaseClient() {
         return supabaseClientInstance;
     }
     
-    // Third check: Prevent concurrent initialization attempts
+    // Third check: If initialization is in progress, return null (caller should retry later)
+    // This prevents race conditions while keeping function synchronous
     if (window.__supabaseClientInitializing) {
-        // Another initialization is in progress, wait and retry
-        return new Promise((resolve) => {
-            const checkInterval = setInterval(() => {
-                if (window[CLIENT_STORAGE_KEY]) {
-                    clearInterval(checkInterval);
-                    supabaseClientInstance = window[CLIENT_STORAGE_KEY];
-                    resolve(supabaseClientInstance);
-                } else if (!window.__supabaseClientInitializing) {
-                    // Initialization failed or was cancelled
-                    clearInterval(checkInterval);
-                    resolve(null);
-                }
-            }, 50);
-        });
+        return null;
     }
     
     // No client exists - create it synchronously if possible
@@ -65,7 +54,7 @@ function getSupabaseClient() {
             window.__supabaseClientInitializing = false;
             
             return supabaseClientInstance;
-} catch (e) {
+        } catch (e) {
             window.__supabaseClientInitializing = false;
             console.error('❌ Error creating Supabase client:', e);
             return null;
