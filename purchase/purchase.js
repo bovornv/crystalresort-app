@@ -1175,11 +1175,26 @@ function handleLogin(event) {
         loadTemplates();
         switchView('board');
         renderBoard(); // Render board after data loads
+        
+        // Verify Supabase connection and real-time sync
+        if (checkSupabaseConfig()) {
+            console.log('✅ Supabase configured - real-time sync should work');
+            console.log('📊 Current items count:', items.length);
+            if (realtimeSubscribed) {
+                console.log('✅ Real-time subscriptions active');
+            } else {
+                console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+            }
+        } else {
+            console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
+            console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
+        }
     }).catch((error) => {
         // Silently continue even if data load fails
         loadTemplates();
         switchView('board');
         renderBoard(); // Render board even if data load fails
+        console.error('Error loading data:', error);
     });
 }
 
@@ -4104,12 +4119,14 @@ async function moveItem(itemId, newStatus) {
     
     // Save to Supabase if configured (single save)
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item, 'user');
-    }
-    
-    // Save to localStorage (fallback only if Supabase not configured)
-    if (!checkSupabaseConfig()) {
-    saveData().catch(err => console.error('Error saving data:', err));
+        const saved = await saveItemToSupabase(item, 'user');
+        if (!saved) {
+            console.warn('⚠️ Failed to save item to Supabase - sync may not work');
+        }
+    } else {
+        // Fallback to localStorage only if Supabase not configured
+        saveData().catch(err => console.error('Error saving data:', err));
+        console.warn('⚠️ Supabase not configured - saving to localStorage only (no sync)');
     }
     renderBoard();
     
@@ -6753,11 +6770,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadTemplates();
                 switchView('board');
                 renderBoard(); // Always render board after data loads
+                
+                // Verify Supabase connection and real-time sync
+                if (checkSupabaseConfig()) {
+                    console.log('✅ Supabase configured - real-time sync should work');
+                    console.log('📊 Current items count:', items.length);
+                    if (realtimeSubscribed) {
+                        console.log('✅ Real-time subscriptions active');
+                    } else {
+                        console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+                    }
+                } else {
+                    console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
+                    console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
+                }
             }).catch((error) => {
                 // Silently continue even if data load fails
                 loadTemplates();
                 switchView('board');
                 renderBoard(); // Render board even if data load fails
+                console.error('Error loading data:', error);
             });
         }, 100);
     }
