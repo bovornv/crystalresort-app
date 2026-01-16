@@ -6908,9 +6908,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 switchView('board');
                 renderBoard(); // Always render board after data loads
                 
-                // Ensure real-time subscriptions are active
+                // Verify subscriptions are still active (they should be from earlier setup)
                 if (checkSupabaseConfig() && !realtimeSubscribed) {
-                    console.log('🔄 Setting up real-time subscriptions...');
+                    console.warn('⚠️ Real-time subscriptions not active after data load - reconnecting...');
                     setupRealtimeSubscriptions();
                 }
                 
