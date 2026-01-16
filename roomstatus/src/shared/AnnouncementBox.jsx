@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { supabase } from '../services/supabase';
 
@@ -8,6 +8,10 @@ const AnnouncementBox = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Use refs to store intervals/subscriptions for cleanup
+  const pollIntervalRef = useRef(null);
+  const realtimeSubscriptionRef = useRef(null);
 
   // Only show announcement box on main page
   const currentPath = window.location.pathname;
@@ -91,10 +95,18 @@ const AnnouncementBox = () => {
       supabaseUrl !== '' && supabaseKey !== '' &&
       !supabaseUrl.includes('placeholder') && !supabaseKey.includes('placeholder');
 
+    let realtimeWorking = false;
+
     if (isSupabaseConfigured) {
       try {
-        realtimeSubscription = supabase
-          .channel('announcements-changes')
+        // Use unique channel name to avoid conflicts
+        const channelName = `announcements-changes-${Date.now()}`;
+        realtimeSubscriptionRef.current = supabase
+          .channel(channelName, {
+            config: {
+              broadcast: { self: true }
+            }
+          })
           .on('postgres_changes', 
             { 
               event: '*', 
@@ -104,6 +116,11 @@ const AnnouncementBox = () => {
             }, 
             (payload) => {
               console.log('Announcement updated via realtime:', payload);
+              realtimeWorking = true; // Mark realtime as working
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current); // Stop polling if realtime works
+                pollIntervalRef.current = null;
+              }
               if (payload.new) {
                 setAnnouncement({
                   text: payload.new.text || '',
@@ -116,23 +133,46 @@ const AnnouncementBox = () => {
               }
             }
           )
-          .subscribe();
+          .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('✅ Announcement realtime subscribed');
+              realtimeWorking = true;
+              if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+              }
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+              console.warn('⚠️ Announcement realtime subscription error:', status, err);
+              realtimeWorking = false;
+              // Start polling if realtime fails
+              if (!pollIntervalRef.current) {
+                pollIntervalRef.current = setInterval(() => {
+                  loadAnnouncement();
+                }, 2000); // Poll every 2 seconds as fallback
+              }
+            }
+          });
       } catch (e) {
         console.error('Error setting up realtime subscription:', e);
+        realtimeWorking = false;
       }
     }
 
-    // Fallback: Poll for updates every 5 seconds if realtime doesn't work
-    const pollInterval = setInterval(() => {
-      loadAnnouncement();
-    }, 5000);
+    // Fallback: Poll for updates every 2 seconds only if realtime doesn't work
+    if (!realtimeWorking && !pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(() => {
+        loadAnnouncement();
+      }, 2000);
+    }
 
     return () => {
-      if (realtimeSubscription) {
-        supabase.removeChannel(realtimeSubscription);
+      if (realtimeSubscriptionRef.current) {
+        supabase.removeChannel(realtimeSubscriptionRef.current);
+        realtimeSubscriptionRef.current = null;
       }
-      if (pollInterval) {
-        clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
     };
   }, []);

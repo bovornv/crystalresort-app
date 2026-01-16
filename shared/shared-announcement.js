@@ -358,10 +358,19 @@
 
       // Set up realtime subscription if Supabase is available
       const client = initializeSupabaseClient();
+      let pollInterval = null;
+      let realtimeWorking = false;
+
       if (client) {
         try {
+          // Use unique channel name to avoid conflicts
+          const channelName = `announcements-changes-${Date.now()}`;
           realtimeSubscription = client
-            .channel('announcements-changes')
+            .channel(channelName, {
+              config: {
+                broadcast: { self: true }
+              }
+            })
             .on('postgres_changes', 
               { 
                 event: '*', 
@@ -371,19 +380,61 @@
               }, 
               (payload) => {
                 console.log('Announcement updated via realtime:', payload);
-                renderAnnouncementBox();
+              realtimeWorking = true; // Mark realtime as working
+              if (pollInterval) {
+                clearInterval(pollInterval); // Stop polling if realtime works
+                pollInterval = null;
+              }
+              renderAnnouncementBox();
               }
             )
-            .subscribe();
+            .subscribe((status, err) => {
+              if (status === 'SUBSCRIBED') {
+                console.log('✅ Announcement realtime subscribed');
+                realtimeWorking = true;
+                if (pollInterval) {
+                  clearInterval(pollInterval);
+                  pollInterval = null;
+                }
+              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                console.warn('⚠️ Announcement realtime subscription error:', status, err);
+                realtimeWorking = false;
+                // Start polling if realtime fails
+                if (!pollInterval) {
+                  pollInterval = setInterval(() => {
+                    renderAnnouncementBox();
+                  }, 2000); // Poll every 2 seconds as fallback
+                }
+              }
+            });
         } catch (e) {
           console.error('Error setting up realtime subscription:', e);
+          realtimeWorking = false;
         }
       }
 
-      // Fallback: Poll for updates every 5 seconds
-      setInterval(() => {
-        renderAnnouncementBox();
-      }, 5000);
+      // Fallback: Poll for updates every 2 seconds only if realtime doesn't work
+      if (!realtimeWorking && !pollInterval) {
+        pollInterval = setInterval(() => {
+          renderAnnouncementBox();
+        }, 2000);
+      }
+      
+      // Store references for cleanup
+      window.announcementPollInterval = pollInterval;
+      window.announcementRealtimeSubscription = realtimeSubscription;
+      
+      // Cleanup on page unload
+      window.addEventListener('beforeunload', () => {
+        if (window.announcementPollInterval) {
+          clearInterval(window.announcementPollInterval);
+          window.announcementPollInterval = null;
+        }
+        if (window.announcementRealtimeSubscription && client) {
+          client.removeChannel(window.announcementRealtimeSubscription);
+          window.announcementRealtimeSubscription = null;
+        }
+      });
 
       // Listen for localStorage updates (fallback)
       window.addEventListener('storage', (e) => {
