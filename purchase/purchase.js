@@ -365,12 +365,12 @@ async function saveItemToSupabase(item, source = 'user') {
             }
         }
         
-        // Track this as a local update to prevent processing our own real-time events
+        // Track this as a local update to prevent echo saves (only for 1 second)
+        // After 1 second, accept real-time updates as source of truth (even from same device)
         lastLocalUpdateIds.add(item.id);
-        // Clear after 2 seconds to allow sync across devices (increased from 1 second)
         setTimeout(() => {
             lastLocalUpdateIds.delete(item.id);
-        }, 2000);
+        }, 1000); // Reduced to 1 second - real-time updates are source of truth
         
         // When status changes to 'received', insert snapshot into purchase_history
         // Only insert if we haven't already inserted history for this item recently
@@ -713,7 +713,7 @@ function setupRealtimeSubscriptions() {
     // Clean up any existing subscriptions first
     realtimeSubscriptions.forEach(sub => {
         try {
-            supabaseClientInstance.removeChannel(sub);
+        supabaseClientInstance.removeChannel(sub);
         } catch (e) {
             // Silent cleanup
         }
@@ -740,19 +740,19 @@ function setupRealtimeSubscriptions() {
                 filter: undefined
             },
             async (payload) => {
-                // Real-time update - update UI ONLY, NEVER write back to Supabase
+                // Real-time update - ALWAYS accept as source of truth
                 const itemId = payload.new?.id || payload.old?.id;
                 
-                // Prevent feedback loops: ignore our own updates
-                if (lastLocalUpdateIds.has(itemId)) {
-                    return; // This is our own update, ignore it
-                }
+                // Minimal logging: table, event type, item ID
+                console.log(`🔄 RT ${payload.eventType}:`, itemId.substring(0, 8));
                 
-                // Log real-time events for debugging (first 10 events)
-                if (!window.realtimeEventCount) window.realtimeEventCount = 0;
-                window.realtimeEventCount++;
-                if (window.realtimeEventCount <= 10) {
-                    console.log(`✅ Real-time ${payload.eventType} received:`, itemId, payload.new?.item_name || payload.old?.item_name || 'N/A');
+                // CRITICAL: Only block echo saves (our own writes), NOT cross-device updates
+                // lastLocalUpdateIds only blocks for 1 second to prevent echo loops
+                // After 1 second, accept ALL updates (including from same device) as source of truth
+                if (lastLocalUpdateIds.has(itemId)) {
+                    // This is likely our own update (within 1 second window)
+                    // Still log but don't process to prevent echo loops
+                    return;
                 }
                 
                 if (payload.eventType === 'INSERT') {
@@ -775,7 +775,7 @@ function setupRealtimeSubscriptions() {
                         updatePresenceIndicator();
                     }
                 } else if (payload.eventType === 'UPDATE') {
-                    // Real-time UPDATE → update item in state
+                    // Real-time UPDATE → ALWAYS accept as source of truth
                     const updatedItem = migrateItemToV2(payload.new);
                     updatedItem._fromRealtime = true; // Mark to prevent echo save
                     
@@ -783,15 +783,9 @@ function setupRealtimeSubscriptions() {
                     if (index >= 0) {
                         const existingItem = items[index];
                         
-                        // CRITICAL: Don't overwrite if local change is very recent (within 200ms)
-                        // This prevents bouncing back when user just moved an item
-                        // Reduced from 500ms to 200ms to allow faster sync across devices
-                        const localChangeTime = existingItem.lastUpdated || 0;
-                        const now = Date.now();
-                        if ((now - localChangeTime) < 200 && !existingItem._fromRealtime) {
-                            // Local change is very recent, ignore this remote update
-                            return;
-                        }
+                        // CRITICAL: Real-time updates are ALWAYS the source of truth
+                        // Do NOT block based on local change time - accept all updates
+                        // The lastLocalUpdateIds check above already prevents echo loops
                         
                         // Validate name from update
                         const updateHasValidName = updatedItem.name && 
@@ -813,14 +807,13 @@ function setupRealtimeSubscriptions() {
                             finalName = updatedItem.name;
                         }
                         
-                        // CRITICAL: Mutate state using same logic as local updates
-                        // Merge: preserve local-only fields, update with database fields
+                        // CRITICAL: Real-time update is source of truth - merge database fields
                         items[index] = {
                             ...existingItem,
                             ...updatedItem,
                             name: finalName,
                             _fromRealtime: true,
-                            // Preserve local-only fields
+                            // Preserve local-only fields that aren't in database
                             history: existingItem.history || updatedItem.history,
                             statusTimestamps: updatedItem.statusTimestamps || existingItem.statusTimestamps || {}
                         };
@@ -828,21 +821,24 @@ function setupRealtimeSubscriptions() {
                         // Auto-detect issue status (same as local updates)
                         detectAndUpdateIssueStatus(items[index]);
                         
-                        // Log operation once
-                        if (!window.realtimeUpdateLogged) {
-                            console.log(`✅ Remote UPDATE: ${updatedItem.id} - status: ${updatedItem.status}`);
-                            window.realtimeUpdateLogged = true;
-                        }
-                        
-                        // CRITICAL: Re-render UI to reflect state changes
+                        // CRITICAL: Re-render UI immediately to reflect state changes
                     renderBoard();
                         updatePresenceIndicator();
                         
-                        // Refresh views if active (same as local updates)
+                        // Refresh views if active
                         if (currentView === 'dashboard') {
                             renderDashboard();
                         } else if (currentView === 'mobile') {
                             renderMobileView();
+                        }
+                    } else {
+                        // Item doesn't exist locally - add it (might be from another device)
+                        const hasValidName = updatedItem.name && 
+                                           updatedItem.name.trim() !== '' && 
+                                           updatedItem.name !== 'Unknown Item';
+                        if (hasValidName) {
+                            items.push(updatedItem);
+                            renderBoard();
                         }
                     }
                 } else if (payload.eventType === 'DELETE') {
