@@ -3671,7 +3671,18 @@ async function handleAddItem(event) {
     
         // Save to Supabase if configured (single save)
     if (checkSupabaseConfig()) {
-            await saveItemToSupabase(newItem, 'user');
+            try {
+                await saveItemToSupabase(newItem, 'user');
+            } catch (error) {
+                console.error('❌ Error saving new item to Supabase:', error);
+                console.error('Item details:', { id: newItem.id, name: newItem.name });
+                // Still save to localStorage as fallback
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                } catch (e) {
+                    console.error('Error saving to localStorage:', e);
+                }
+            }
     }
     
         // Save to localStorage (fallback only if Supabase not configured)
