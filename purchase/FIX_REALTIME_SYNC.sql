@@ -7,10 +7,37 @@
 
 -- Step 1: Enable Real-time Replication for purchase_items table
 -- This allows Supabase to send real-time updates via WebSocket
-ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;
+-- Use DO block to handle case where table is already in publication
+DO $$
+BEGIN
+    -- Check if purchase_items is already in the publication
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' 
+        AND tablename = 'purchase_items'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE purchase_items;
+        RAISE NOTICE 'Added purchase_items to real-time publication';
+    ELSE
+        RAISE NOTICE 'purchase_items is already in real-time publication';
+    END IF;
+END $$;
 
 -- Step 2: Enable Real-time Replication for purchase_history table (optional)
-ALTER PUBLICATION supabase_realtime ADD TABLE purchase_history;
+DO $$
+BEGIN
+    -- Check if purchase_history is already in the publication
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' 
+        AND tablename = 'purchase_history'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE purchase_history;
+        RAISE NOTICE 'Added purchase_history to real-time publication';
+    ELSE
+        RAISE NOTICE 'purchase_history is already in real-time publication';
+    END IF;
+END $$;
 
 -- Step 3: Verify Real-time is Enabled
 -- Run this to check if tables are enabled for real-time:
