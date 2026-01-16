@@ -76,6 +76,60 @@ let currentUser = null;
 let userRole = 'staff'; // 'admin', 'manager', or 'staff'
 let presenceUpdateInterval = null;
 
+// User roles configuration
+// Map nicknames to roles: 'admin', 'manager', or 'staff'
+// Update this object to assign roles to users
+const USER_ROLES = {
+    // Example: 'admin': 'admin', 'manager': 'manager', 'john': 'staff'
+    // Add your users here:
+    // 'nickname1': 'admin',
+    // 'nickname2': 'manager',
+    // 'nickname3': 'staff',
+    // Default role for unknown users is 'staff'
+};
+
+// Load user roles from localStorage (allows dynamic updates)
+function loadUserRoles() {
+    const storedRoles = localStorage.getItem('crystal_user_roles');
+    if (storedRoles) {
+        try {
+            const parsed = JSON.parse(storedRoles);
+            Object.assign(USER_ROLES, parsed);
+        } catch (e) {
+            console.error('Error loading user roles:', e);
+        }
+    }
+    return USER_ROLES;
+}
+
+// Save user roles to localStorage
+function saveUserRoles() {
+    localStorage.setItem('crystal_user_roles', JSON.stringify(USER_ROLES));
+}
+
+// Get role for a nickname
+function getUserRole(nickname) {
+    if (!nickname) return 'staff';
+    const roles = loadUserRoles();
+    return roles[nickname] || 'staff'; // Default to 'staff' if not found
+}
+
+// Set role for a nickname (admin only)
+function setUserRole(nickname, role) {
+    if (!isAdmin()) {
+        showNotification('Only admins can change user roles', 'error');
+        return false;
+    }
+    if (!['admin', 'manager', 'staff'].includes(role)) {
+        showNotification('Invalid role. Must be: admin, manager, or staff', 'error');
+        return false;
+    }
+    USER_ROLES[nickname] = role;
+    saveUserRoles();
+    showNotification(`Role updated: ${nickname} → ${role}`, 'success');
+    return true;
+}
+
 // Check if Supabase is configured (silent check - no logging)
 function checkSupabaseConfig() {
     if (supabaseClientInstance && SUPABASE_URL && SUPABASE_URL.startsWith('https://') && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.startsWith('eyJ')) {
@@ -926,7 +980,7 @@ function loadUser() {
     
     if (storedNickname) {
         currentUser = { nickname: storedNickname };
-        userRole = 'staff';
+        userRole = getUserRole(storedNickname); // Load role based on nickname
         return true;
     }
     
