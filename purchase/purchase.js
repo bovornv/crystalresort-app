@@ -1143,7 +1143,11 @@ function updateUserUI() {
 }
 
 // Toggle user menu dropdown
-function toggleUserMenu() {
+function toggleUserMenu(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
     const dropdown = document.getElementById('userMenuDropdown');
     if (dropdown) {
         dropdown.classList.toggle('active');
