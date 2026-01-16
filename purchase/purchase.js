@@ -1039,14 +1039,22 @@ function handleLogin(event) {
     updateUserUI();
     showAllContent();
     
+    // Ensure board view is visible
+    const boardView = document.getElementById('boardView');
+    if (boardView) {
+        boardView.style.display = 'block';
+    }
+    
     // Load data from Supabase if configured (but don't block on it)
     loadData().then(() => {
         loadTemplates();
         switchView('board');
+        renderBoard(); // Render board after data loads
     }).catch((error) => {
         // Silently continue even if data load fails
         loadTemplates();
         switchView('board');
+        renderBoard(); // Render board even if data load fails
     });
 }
 
