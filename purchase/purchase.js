@@ -4246,40 +4246,46 @@ function updateBulkActionsButton() {
 }
 
 // Update action button states (receive/issue buttons)
+// Buttons are always enabled for logged-in users (not based on selection)
 function updateActionButtonStates() {
     const receiveBtn = document.getElementById('receiveBtn');
     const issueBtn = document.getElementById('issueBtn');
-    const hasSelection = selectedItems.size > 0;
+    const isLoggedInUser = isLoggedIn();
     
     if (receiveBtn) {
-        receiveBtn.disabled = !hasSelection;
-        receiveBtn.style.opacity = hasSelection ? '1' : '0.5';
-        receiveBtn.style.cursor = hasSelection ? 'pointer' : 'not-allowed';
+        receiveBtn.disabled = !isLoggedInUser;
+        receiveBtn.style.opacity = isLoggedInUser ? '1' : '0.5';
+        receiveBtn.style.cursor = isLoggedInUser ? 'pointer' : 'not-allowed';
     }
     
     if (issueBtn) {
-        issueBtn.disabled = !hasSelection;
-        issueBtn.style.opacity = hasSelection ? '1' : '0.5';
-        issueBtn.style.cursor = hasSelection ? 'pointer' : 'not-allowed';
+        issueBtn.disabled = !isLoggedInUser;
+        issueBtn.style.opacity = isLoggedInUser ? '1' : '0.5';
+        issueBtn.style.cursor = isLoggedInUser ? 'pointer' : 'not-allowed';
     }
 }
 
-// Handle receive action for selected items
+// Handle receive action - works with or without selection
 async function handleReceiveSelected() {
     if (!requireAuth(() => true)) return;
     
-    if (selectedItems.size === 0) {
-        showNotification(t('selectItemsFirst') || 'Please select items first', 'info');
-        return;
+    // If items are selected, use them; otherwise find eligible items
+    let eligibleItems = [];
+    
+    if (selectedItems.size > 0) {
+        const selectedItemIds = Array.from(selectedItems);
+        eligibleItems = selectedItemIds
+            .map(id => items.find(item => item.id === id))
+            .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+    } else {
+        // No selection - find all eligible items
+        eligibleItems = items.filter(item => 
+            item && (item.status === 'bought' || item.status === 'ordered')
+        );
     }
     
-    const selectedItemIds = Array.from(selectedItems);
-    const eligibleItems = selectedItemIds
-        .map(id => items.find(item => item.id === id))
-        .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
-    
     if (eligibleItems.length === 0) {
-        showNotification(t('noEligibleItems') || 'No eligible items selected. Items must be in "Bought" or "Ordered" status.', 'info');
+        showNotification(t('noEligibleItems') || 'No eligible items found. Items must be in "Bought" or "Ordered" status.', 'info');
         return;
     }
     
@@ -4292,15 +4298,12 @@ async function handleReceiveSelected() {
             showReceivingModal(item.id);
         }
     } else {
-        // Process multiple items
-        for (const item of eligibleItems) {
-            if (item.status === 'bought' && !item.issue) {
-                await quickReceive(item.id);
-            } else {
-                // For items that need full receive flow, show modal for first one
-                showReceivingModal(item.id);
-                break; // Only show modal for first item
-            }
+        // Process multiple items - show modal for first one
+        const firstItem = eligibleItems[0];
+        if (firstItem.status === 'bought' && !firstItem.issue) {
+            await quickReceive(firstItem.id);
+        } else {
+            showReceivingModal(firstItem.id);
         }
     }
     
@@ -4310,26 +4313,31 @@ async function handleReceiveSelected() {
     renderBoard();
 }
 
-// Handle issue action for selected items
+// Handle issue action - works with or without selection
 function handleIssueSelected() {
     if (!requireAuth(() => true)) return;
     
-    if (selectedItems.size === 0) {
-        showNotification(t('selectItemsFirst') || 'Please select items first', 'info');
-        return;
-    }
+    // If items are selected, use them; otherwise find eligible items
+    let eligibleItems = [];
     
-    const selectedItemIds = Array.from(selectedItems);
-    const eligibleItems = selectedItemIds
-        .map(id => items.find(item => item.id === id))
-        .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+    if (selectedItems.size > 0) {
+        const selectedItemIds = Array.from(selectedItems);
+        eligibleItems = selectedItemIds
+            .map(id => items.find(item => item.id === id))
+            .filter(item => item && (item.status === 'bought' || item.status === 'ordered'));
+    } else {
+        // No selection - find all eligible items
+        eligibleItems = items.filter(item => 
+            item && (item.status === 'bought' || item.status === 'ordered')
+        );
+    }
     
     if (eligibleItems.length === 0) {
-        showNotification(t('noEligibleItems') || 'No eligible items selected. Items must be in "Bought" or "Ordered" status.', 'info');
+        showNotification(t('noEligibleItems') || 'No eligible items found. Items must be in "Bought" or "Ordered" status.', 'info');
         return;
     }
     
-    // Show issue modal for first selected item
+    // Show issue modal for first eligible item
     const firstItem = eligibleItems[0];
     if (firstItem.status === 'bought') {
         showQuickIssueSheet(firstItem.id);

@@ -585,16 +585,22 @@ header h1 {
 
 .bottom-actions-bar {
     background-color: #ffffff;
-    padding: 20px;
-    margin-top: 32px;
+    padding: 16px 20px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
     border-top: 1px solid #e9e9e7;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05);
     display: flex !important;
     justify-content: center;
     align-items: center;
     visibility: visible !important;
     opacity: 1 !important;
-    position: relative;
-    z-index: 10;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .search-container {
@@ -2178,23 +2184,25 @@ header h1 {
 
 .board-container {
     display: flex;
-    gap: 15px;
+    gap: 20px;
     overflow-x: auto;
-    padding-top: 30px; /* Add top padding to move columns down and prevent header overlap */
-    padding-bottom: 10px;
-    min-height: calc(100vh - 150px);
+    padding-top: 20px;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom)); /* Space for fixed bottom bar */
+    min-height: calc(100vh - 200px);
 }
 
 .column {
     min-width: 420px;
     max-width: 420px;
     background-color: #ffffff;
-    border-radius: 0;
+    border-radius: 8px;
     padding: 0;
     display: flex;
     flex-direction: column;
-    height: fit-content;
+    min-height: calc(100vh - 250px); /* Expand to use screen space */
+    max-height: calc(100vh - 250px);
     border: 1px solid #e9e9e7;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 /* Column borders - clean and minimal like Room Status */
@@ -2238,7 +2246,7 @@ header h1 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0;
-    padding: 12px 16px;
+    padding: 16px 20px;
     background-color: #fafafa; /* Match Room Status bg-gray-50 */
     border-radius: 8px 8px 0 0;
     cursor: pointer;
@@ -2247,6 +2255,7 @@ header h1 {
     flex-wrap: wrap;
     gap: 10px;
     border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .column-header:hover {
