@@ -168,6 +168,8 @@ async function loadItemsFromSupabase() {
 
 // Track last save per item to prevent duplicates
 const lastSaveState = new Map();
+// Track items that have already had history inserted (prevent duplicate history inserts)
+const historyInsertedItems = new Set();
 
 async function saveItemToSupabase(item, source = 'user') {
     // CRITICAL: Skip save if this update came from real-time (prevent echo)
@@ -320,8 +322,17 @@ async function saveItemToSupabase(item, source = 'user') {
         }, 1000);
         
         // When status changes to 'received', insert snapshot into purchase_history
-        if (item.status === 'received') {
-            await insertPurchaseHistory(item, user?.id || null);
+        // Only insert if we haven't already inserted history for this item recently
+        // Skip if status is 'received_temp' (used during bulk save to prevent duplicate inserts)
+        if (item.status === 'received' && item.status !== 'received_temp' && !historyInsertedItems.has(item.id)) {
+            const inserted = await insertPurchaseHistory(item, user?.id || null);
+            if (inserted) {
+                historyInsertedItems.add(item.id);
+                // Clear after 5 minutes to allow re-insertion if needed
+                setTimeout(() => {
+                    historyInsertedItems.delete(item.id);
+                }, 5 * 60 * 1000);
+            }
         }
         
         return true;
@@ -335,22 +346,28 @@ async function saveItemToSupabase(item, source = 'user') {
 async function insertPurchaseHistory(item, userId) {
     if (!checkSupabaseConfig()) return false;
     
+    // Skip if we've already inserted history for this item recently (in-memory check)
+    if (historyInsertedItems.has(item.id)) {
+        return false; // Already inserted, skip
+    }
+    
     try {
         // Check if history record already exists for this item to avoid duplicates
-        // Look for records with same item_id created in the last minute (prevents rapid duplicate saves)
+        // Look for records with same item_id created in the last 5 minutes (prevents duplicate saves)
         // Note: If created_at column doesn't exist, skip duplicate check
         try {
-            const oneMinuteAgo = new Date(Date.now() - 60000).toISOString();
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60000).toISOString();
             const { data: existing, error: checkError } = await supabaseClientInstance
                 .from('purchase_history')
                 .select('id')
                 .eq('item_id', item.id)
-                .gte('created_at', oneMinuteAgo)
+                .gte('created_at', fiveMinutesAgo)
                 .limit(1);
             
             // Only skip if column exists and we found a recent record
             if (!checkError && existing && existing.length > 0) {
-                return true; // Already recorded recently
+                historyInsertedItems.add(item.id); // Mark as inserted
+                return false; // Already recorded recently, skip insert
             }
         } catch (e) {
             // If created_at column doesn't exist (code 42703), continue with insert
