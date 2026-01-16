@@ -1176,19 +1176,22 @@ function handleLogin(event) {
         switchView('board');
         renderBoard(); // Render board after data loads
         
-        // Verify Supabase connection and real-time sync
-        if (checkSupabaseConfig()) {
-            console.log('✅ Supabase configured - real-time sync should work');
-            console.log('📊 Current items count:', items.length);
-            if (realtimeSubscribed) {
-                console.log('✅ Real-time subscriptions active');
+        // Verify Supabase connection and real-time sync (check after a delay to allow subscriptions to establish)
+        setTimeout(() => {
+            if (checkSupabaseConfig()) {
+                console.log('✅ Supabase configured - real-time sync should work');
+                console.log('📊 Current items count:', items.length);
+                if (realtimeSubscribed) {
+                    console.log('✅ Real-time subscriptions active');
+                } else {
+                    console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+                    console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
+                }
             } else {
-                console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+                console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
+                console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
             }
-        } else {
-            console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
-            console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
-        }
+        }, 2000); // Wait 2 seconds for subscriptions to establish
     }).catch((error) => {
         // Silently continue even if data load fails
         loadTemplates();
@@ -6771,19 +6774,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 switchView('board');
                 renderBoard(); // Always render board after data loads
                 
-                // Verify Supabase connection and real-time sync
-                if (checkSupabaseConfig()) {
-                    console.log('✅ Supabase configured - real-time sync should work');
-                    console.log('📊 Current items count:', items.length);
-                    if (realtimeSubscribed) {
-                        console.log('✅ Real-time subscriptions active');
+                // Verify Supabase connection and real-time sync (check after a delay to allow subscriptions to establish)
+                setTimeout(() => {
+                    if (checkSupabaseConfig()) {
+                        console.log('✅ Supabase configured - real-time sync should work');
+                        console.log('📊 Current items count:', items.length);
+                        if (realtimeSubscribed) {
+                            console.log('✅ Real-time subscriptions active');
+                        } else {
+                            console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+                            console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
+                        }
                     } else {
-                        console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+                        console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
+                        console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
                     }
-                } else {
-                    console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
-                    console.warn('💡 To enable sync: Configure SUPABASE_URL and SUPABASE_ANON_KEY in purchase.js');
-                }
+                }, 2000); // Wait 2 seconds for subscriptions to establish
             }).catch((error) => {
                 // Silently continue even if data load fails
                 loadTemplates();
