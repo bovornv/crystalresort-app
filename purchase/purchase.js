@@ -791,9 +791,15 @@ function setupRealtimeSubscriptions() {
         )
         .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
-                // Silent success - real-time is working
+                console.log('✅ Real-time subscribed: purchase_history');
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                 console.error('❌ purchase_history subscription error:', status, err);
+                // Attempt to reconnect after a delay
+                setTimeout(() => {
+                    if (checkSupabaseConfig()) {
+                        setupRealtimeSubscriptions();
+                    }
+                }, 5000);
             }
         });
     
