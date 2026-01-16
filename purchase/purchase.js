@@ -7210,9 +7210,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             console.log('✅ Real-time subscriptions active');
                         } else {
                             console.warn('⚠️ Real-time subscriptions not active - sync may not work');
-                                    console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
-                                }
-                            }, 3000);
+                            console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
                         }
                     } else {
                         console.warn('⚠️ Supabase not configured - using localStorage (no sync across devices)');
