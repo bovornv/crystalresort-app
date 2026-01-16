@@ -701,10 +701,10 @@ function setupRealtimeSubscriptions() {
                     return; // This is our own update, ignore it
                 }
                 
-                // Log real-time events for debugging (first few only)
+                // Log real-time events for debugging (first 10 events)
                 if (!window.realtimeEventCount) window.realtimeEventCount = 0;
                 window.realtimeEventCount++;
-                if (window.realtimeEventCount <= 3) {
+                if (window.realtimeEventCount <= 10) {
                     console.log(`✅ Real-time ${payload.eventType} received:`, itemId, payload.new?.item_name || payload.old?.item_name || 'N/A');
                 }
                 
