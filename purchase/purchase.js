@@ -1499,12 +1499,29 @@ function handleLogin(event) {
         switchView('board');
         renderBoard(); // Render board after data loads
         
+        // ========================================================================
+        // CRITICAL: START REALTIME SUBSCRIPTIONS AFTER DATA LOAD COMPLETE
+        // ========================================================================
+        // This is the ONLY place realtime subscriptions should start after login:
+        // - Supabase client is ready (checked in loadData)
+        // - Initial data load is complete
+        // - User is logged in (currentUser check)
+        // ========================================================================
+        if (checkSupabaseConfig() && currentUser && getSupabaseClient()) {
+            if (!realtimeManager.isStarted) {
+                console.log('🔄 Starting real-time subscriptions after login data load...');
+                realtimeManager.start();
+            } else {
+                console.log('✅ Real-time subscriptions already active');
+            }
+        }
+        
         // Verify Supabase connection and real-time sync (check after a delay to allow subscriptions to establish)
         setTimeout(() => {
             if (checkSupabaseConfig()) {
                 console.log('✅ Supabase configured - real-time sync should work');
                 console.log('📊 Current items count:', items.length);
-                if (realtimeSubscribed) {
+                if (realtimeManager.isStarted) {
                     console.log('✅ Real-time subscriptions active');
                 } else {
                     console.warn('⚠️ Real-time subscriptions not active - sync may not work');
