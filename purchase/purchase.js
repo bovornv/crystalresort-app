@@ -847,7 +847,7 @@ function setupRealtimeSubscriptions() {
     
     // Subscribe to presence changes for online users count
     const presenceChannel = supabaseClientInstance
-        .channel('presence-changes')
+        .channel(`presence-${channelId}`)
         .on('postgres_changes',
             {
                 event: '*',
