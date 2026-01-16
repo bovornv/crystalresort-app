@@ -695,30 +695,54 @@ header h1 {
 
 .actions-container {
     display: flex !important;
-    gap: 10px;
+    gap: 12px;
     flex-wrap: wrap;
     justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .action-header-btn {
-    padding: 8px 16px;
+    padding: 12px 20px;
     border: 1px solid #e5e7eb;
     background-color: #ffffff;
-    border-radius: 8px; /* Match Room Status rounded-lg */
+    border-radius: 8px;
     font-size: 14px;
     font-weight: 500;
     color: #374151;
     cursor: pointer;
-    transition: background-color 0.15s;
+    transition: all 0.15s;
+    min-height: 44px; /* Better touch target for mobile */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    flex: 1;
+    min-width: 140px;
+    max-width: 200px;
 }
 
-.action-header-btn:hover {
-    background-color: #f3f4f6; /* Match Room Status hover gray */
+.action-header-btn:hover:not(:disabled) {
+    background-color: #f3f4f6;
     border-color: #d1d5db;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-header-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.action-header-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 .action-header-btn.active {
-    background-color: #15803D; /* Match Room Status primary green */
+    background-color: #15803D;
     color: #ffffff;
     border-color: #15803D;
 }
@@ -1362,6 +1386,13 @@ header h1 {
 
 .items-container {
     contain: layout;
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0; /* Allow flex shrinking */
 }
 
 /* Receiving Checklist Styles */
