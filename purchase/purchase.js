@@ -80,12 +80,16 @@ let presenceUpdateInterval = null;
 // Map nicknames to roles: 'admin', 'manager', or 'staff'
 // Update this object to assign roles to users
 const USER_ROLES = {
-    // Example: 'admin': 'admin', 'manager': 'manager', 'john': 'staff'
-    // Add your users here:
-    // 'nickname1': 'admin',
-    // 'nickname2': 'manager',
-    // 'nickname3': 'staff',
-    // Default role for unknown users is 'staff'
+    'admin': 'admin',           // Admin user
+    'ิBV': 'admin',           // Admin user
+    'manager': 'manager',       // Manager user
+    'KV': 'manager',           // Manager user
+    'มิ้ม': 'manager',           // Manager user
+    'ติ๊บ': 'manager',           // Manager user
+    'ต๊อด': 'manager',           // Manager user
+    'เก๋': 'Manager',            // Manager user
+    'แคท': 'staff',          // Staff user
+    // Add more users here...
 };
 
 // Load user roles from localStorage (allows dynamic updates)
