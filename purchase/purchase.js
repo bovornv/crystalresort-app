@@ -1009,8 +1009,9 @@ document.addEventListener('visibilitychange', () => {
 // Handle page focus (desktop tab switching)
 window.addEventListener('focus', () => {
     if (checkSupabaseConfig() && supabaseClientInstance) {
-        // Page focused - reconnect if needed
-        if (!realtimeSubscribed) {
+        // Page focused - reconnect if needed (only once)
+        if (!realtimeSubscribed && !isReconnecting) {
+            console.log('🔄 Page focused - reconnecting realtime...');
             setupRealtimeSubscriptions();
         }
     }
