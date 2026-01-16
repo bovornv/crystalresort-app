@@ -1128,6 +1128,8 @@ function updateUserUI() {
             userMenuContainer.style.display = 'none';
             userMenuContainer.style.visibility = 'hidden';
             userMenuContainer.style.opacity = '0';
+            // Close dropdown if open
+            closeUserMenu();
         }
         if (loginBtnTop) {
             loginBtnTop.style.display = 'flex';
