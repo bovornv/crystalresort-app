@@ -1303,10 +1303,13 @@ function handleLogin(event) {
             if (checkSupabaseConfig()) {
                 console.log('✅ Supabase configured - real-time sync should work');
                 console.log('📊 Current items count:', items.length);
-                if (realtimeSubscribed) {
-                    console.log('✅ Real-time subscriptions active');
+                if (!realtimeManager) {
+                    realtimeManager = RealtimeManager.getInstance();
+                }
+                if (realtimeManager.isActive()) {
+                    console.log('✅ Realtime subscriptions active');
                 } else {
-                    console.warn('⚠️ Real-time subscriptions not active - sync may not work');
+                    console.warn('⚠️ Realtime subscriptions not active - sync may not work');
                     console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
                 }
             } else {
@@ -4249,13 +4252,28 @@ async function handleReceiving(event) {
         // Record purchase with issue status
     await recordPurchase(item, 'Issue');
 
-    // Save to Supabase if configured
+    // Save to Supabase if configured - CRITICAL: Only ONE write per action
     if (checkSupabaseConfig()) {
-        await saveItemToSupabase(item, 'user');
+        try {
+            await saveItemToSupabase(item, 'user');
+            // DO NOT call saveData() here - saveItemToSupabase already handles the write
+        } catch (error) {
+            console.error('❌ Error saving item to Supabase:', error);
+            // Fallback to localStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
+        }
+    } else {
+        // Fallback to localStorage only if Supabase not configured
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        } catch (e) {
+            console.error('Error saving to localStorage:', e);
+        }
     }
-
-    // Save data (fire-and-forget, don't await to avoid blocking UI)
-    saveData().catch(err => console.error('Error saving data:', err));
     renderBoard();
     closeReceivingModal();
     
