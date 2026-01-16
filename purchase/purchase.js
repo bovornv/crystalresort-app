@@ -6882,6 +6882,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // Always update UI to show correct login/logout state
     updateUserUI();
     
+    // CRITICAL ARCHITECTURE: Initialize Supabase client FIRST, then subscriptions, THEN data
+    // Order: 1) Supabase client, 2) Realtime subscriptions, 3) Load data
+    // This ensures subscriptions are active before any data loads, preventing missed updates
+    
+    // Step 1: Ensure Supabase client is ready
+    if (!supabaseClientInstance) {
+        initializeSupabaseClient();
+    }
+    
+    // Step 2: Setup realtime subscriptions BEFORE data load (if logged in and Supabase configured)
+    if (checkSupabaseConfig() && wasLoggedIn && supabaseClientInstance) {
+        console.log('🔄 Initializing realtime subscriptions BEFORE data load...');
+        const subscriptionSetup = setupRealtimeSubscriptions();
+        if (!subscriptionSetup) {
+            console.warn('⚠️ Realtime subscription setup failed - will retry after data load');
+        }
+    }
+    
     if (!wasLoggedIn) {
         // User not logged in - hide content, don't auto-show login modal
         hideAllContent();
