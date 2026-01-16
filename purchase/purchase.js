@@ -4219,7 +4219,12 @@ async function moveItem(itemId, newStatus) {
         }
     } else {
         // Fallback to localStorage only if Supabase not configured
-        saveData().catch(err => console.error('Error saving data:', err));
+        // Don't call saveData() here - it saves all items unnecessarily
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+        } catch (e) {
+            console.error('Error saving to localStorage:', e);
+        }
         console.warn('⚠️ Supabase not configured - saving to localStorage only (no sync)');
     }
     renderBoard();
