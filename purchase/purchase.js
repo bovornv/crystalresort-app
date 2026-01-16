@@ -916,10 +916,9 @@ function setupRealtimeSubscriptions() {
     
     realtimeSubscriptions.push(itemsChannel);
     
-    // Subscribe to purchase_history changes (immutable records)
-    // This updates the history view when new records are added
+    // Subscribe to purchase_history changes - CRITICAL: One subscription only, no user filtering
     const purchaseChannel = supabaseClientInstance
-        .channel(`purchase-history-${channelId}`, {
+        .channel('purchase-history', {
             config: {
                 broadcast: { self: true }
             }
@@ -928,7 +927,8 @@ function setupRealtimeSubscriptions() {
             { 
                 event: '*', 
                 schema: 'public', 
-                table: 'purchase_history' 
+                table: 'purchase_history'
+                // CRITICAL: No filter - subscribe to ALL changes regardless of user/device/nickname
             },
             (payload) => {
                 // Real-time history update - update UI only (silent)
@@ -965,43 +965,22 @@ function setupRealtimeSubscriptions() {
         .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
                 isReconnecting = false;
-                console.log('✅ Real-time subscribed: purchase_history');
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                // Only log error if not already reconnecting (to reduce console spam)
-                if (!isReconnecting) {
-                    console.error('❌ purchase_history subscription error:', status, err);
-                }
-                // Attempt to reconnect after a delay (only if not already reconnecting)
-                if (!isReconnecting) {
-                    isReconnecting = true;
-                    setTimeout(() => {
-                        isReconnecting = false;
-                        if (checkSupabaseConfig() && !realtimeSubscribed) {
-                            setupRealtimeSubscriptions();
-                        }
-                    }, 5000);
-                }
+                console.log('✅ Realtime connected: purchase_history');
+            } else if (status === 'CLOSED') {
+                console.warn('⚠️ Realtime CLOSED: purchase_history');
+                // Reconnect handled by main itemsChannel subscription
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.error(`❌ Realtime error (${status}): purchase_history`, err);
+                // Reconnect handled by main itemsChannel subscription
             }
         });
     
     realtimeSubscriptions.push(purchaseChannel);
     
-    // Subscribe to presence changes for online users count
-    const presenceChannel = supabaseClientInstance
-        .channel(`presence-${channelId}`)
-        .on('postgres_changes',
-            {
-                event: '*',
-                schema: 'public',
-                table: 'presence'
-            },
-            () => {
-                updatePresenceIndicator();
-            }
-        )
-        .subscribe();
+    // Note: Presence channel removed - not needed for core sync functionality
     
-    realtimeSubscriptions.push(presenceChannel);
+    console.log('✅ Realtime subscriptions setup complete');
+    return true;
 }
 
 // Network status monitoring and lifecycle handling
