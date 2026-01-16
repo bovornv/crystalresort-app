@@ -54,7 +54,7 @@ function getSupabaseClient() {
             window.__supabaseClientInitializing = false;
             
             return supabaseClientInstance;
-        } catch (e) {
+} catch (e) {
             window.__supabaseClientInitializing = false;
             console.error('❌ Error creating Supabase client:', e);
             return null;
@@ -978,7 +978,7 @@ class RealtimeManager {
                     broadcast: { self: true }
                 }
             })
-            .on('postgres_changes', 
+        .on('postgres_changes', 
                 { 
                     event: '*', 
                     schema: 'public', 
@@ -1032,7 +1032,7 @@ class RealtimeManager {
                                 ...newItem,
                                 _fromRealtime: true
                             };
-                        } else {
+                    } else {
                             // New item - add it
                             const hasValidName = newItem.name && 
                                                newItem.name.trim() !== '' && 
@@ -1043,7 +1043,7 @@ class RealtimeManager {
                         }
                         
                         // Always re-render to reflect changes
-                        renderBoard();
+                    renderBoard();
                         updatePresenceIndicator();
                     } else if (payload.eventType === 'UPDATE') {
                         // Real-time UPDATE → ALWAYS accept as source of truth
@@ -1112,13 +1112,13 @@ class RealtimeManager {
                                 renderBoard();
                             }
                         }
-                    } else if (payload.eventType === 'DELETE') {
+                } else if (payload.eventType === 'DELETE') {
                         // Real-time DELETE → remove item from state
                         const deletedId = payload.old.id;
                         items = items.filter(i => i.id !== deletedId);
                         
                         // CRITICAL: Re-render UI to reflect state changes
-                        renderBoard();
+                    renderBoard();
                         updatePresenceIndicator();
                     }
                 }
@@ -1143,14 +1143,14 @@ class RealtimeManager {
                     broadcast: { self: true }
                 }
             })
-            .on('postgres_changes',
+        .on('postgres_changes',
                 { 
                     event: '*', 
                     schema: 'public', 
                     table: 'purchase_history'
                     // CRITICAL: No filter - subscribe to ALL changes regardless of user/device
                 },
-                (payload) => {
+            (payload) => {
                     // ========================================================================
                     // CRITICAL: REALTIME HANDLER - READ ONLY
                     // ========================================================================
@@ -1166,24 +1166,24 @@ class RealtimeManager {
                     
                     // Real-time history update - update UI only (silent)
                     if (payload.eventType === 'INSERT') {
-                        const record = {
-                            id: payload.new.id,
+                const record = {
+                    id: payload.new.id,
                             date: new Date(payload.new.created_at).getTime(),
-                            itemName: payload.new.item_name,
-                            supplier: payload.new.supplier,
-                            quantity: payload.new.quantity,
-                            unit: payload.new.unit,
-                            status: payload.new.status,
-                            receiver: payload.new.receiver ? JSON.parse(payload.new.receiver) : null,
-                            issueType: payload.new.issue_type,
-                            issueReason: payload.new.issue_reason,
-                            itemId: payload.new.item_id
-                        };
-                        purchaseRecords.push(record);
+                    itemName: payload.new.item_name,
+                    supplier: payload.new.supplier,
+                    quantity: payload.new.quantity,
+                    unit: payload.new.unit,
+                    status: payload.new.status,
+                    receiver: payload.new.receiver ? JSON.parse(payload.new.receiver) : null,
+                    issueType: payload.new.issue_type,
+                    issueReason: payload.new.issue_reason,
+                    itemId: payload.new.item_id
+                };
+                purchaseRecords.push(record);
                         
-                        // Update UI if purchase history modal is open
+                // Update UI if purchase history modal is open
                         if (document.getElementById('statsModal')?.classList.contains('active')) {
-                            renderStatsDashboard();
+                    renderStatsDashboard();
                         }
                         updatePresenceIndicator();
                     } else if (payload.eventType === 'DELETE') {
@@ -1251,36 +1251,30 @@ function setupRealtimeSubscriptions() {
 }
 
 // Network status monitoring and lifecycle handling
-// Reconnect real-time on network reconnect
+// NOTE: Realtime subscriptions are started ONCE after initial data load
+// Do NOT restart on network/visibility/focus events to prevent duplicate subscriptions
 window.addEventListener('online', () => {
     isOnline = true;
-    if (checkSupabaseConfig() && getSupabaseClient()) {
-        // Reconnect real-time subscriptions if not already started
-        if (!realtimeManager.isStarted) {
-            realtimeManager.start();
-        }
+    // Network reconnected - reload data if needed, but don't restart realtime
+    // RealtimeManager will auto-reconnect via its error handlers if needed
+    if (checkSupabaseConfig() && getSupabaseClient() && !realtimeManager.isStarted) {
+        // Only reload data if realtime is not started (initial page load scenario)
         loadData().catch(err => console.error('Error loading data on online:', err));
     }
 });
 
 // Handle page visibility changes (mobile backgrounding/foregrounding)
+// NOTE: Do NOT restart realtime subscriptions - they persist across visibility changes
 document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && checkSupabaseConfig() && getSupabaseClient()) {
-        // Page became visible - reconnect if needed
-        if (!realtimeManager.isStarted) {
-            realtimeManager.start();
-        }
-    }
+    // Page visibility changed - no action needed
+    // Realtime subscriptions remain active and will auto-reconnect if needed
 });
 
 // Handle page focus (desktop tab switching)
+// NOTE: Do NOT restart realtime subscriptions - they persist across focus changes
 window.addEventListener('focus', () => {
-    if (checkSupabaseConfig() && getSupabaseClient()) {
-        // Page focused - reconnect if needed
-        if (!realtimeManager.isStarted) {
-            realtimeManager.start();
-        }
-    }
+    // Page focused - no action needed
+    // Realtime subscriptions remain active and will auto-reconnect if needed
 });
 
 window.addEventListener('offline', () => {
@@ -2597,12 +2591,8 @@ async function loadData() {
             loadPurchaseRecords();
         }
         
-        // Realtime subscriptions are managed by RealtimeManager
-        // They should be started from DOMContentLoaded, not here
-        // Only start if not already started (defensive check)
-        if (!realtimeManager.isStarted) {
-            realtimeManager.start();
-        }
+        // Realtime subscriptions are started AFTER data load completes (in DOMContentLoaded)
+        // Do NOT start here - this ensures subscriptions start only once after data is loaded
     } else {
         // Use localStorage fallback (synchronous)
         const stored = localStorage.getItem(STORAGE_KEY);
@@ -7152,14 +7142,6 @@ document.addEventListener('DOMContentLoaded', function() {
     // Always update UI to show correct login/logout state
     updateUserUI();
     
-    // 🔍 AUDIT: RECONNECT CALL #7 - Inside DOMContentLoaded, BEFORE loadData()
-    // CRITICAL: Setup real-time subscriptions IMMEDIATELY after Supabase client is ready
-    // BEFORE loading data - this ensures we don't miss any updates
-    if (checkSupabaseConfig() && wasLoggedIn) {
-        console.log('🔄 Setting up real-time subscriptions BEFORE data load...');
-        realtimeManager.start();
-    }
-    
     if (!wasLoggedIn) {
         // User not logged in - hide content, don't auto-show login modal
         hideAllContent();
@@ -7185,6 +7167,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 switchView('board');
                 renderBoard(); // Always render board after data loads
                 
+                // ========================================================================
+                // CRITICAL: START REALTIME SUBSCRIPTIONS AFTER DATA LOAD COMPLETE
+                // ========================================================================
+                // This is the ONLY place realtime subscriptions should start:
+                // - Supabase client is ready (checked in loadData)
+                // - Initial data load is complete
+                // - User is logged in (wasLoggedIn check)
+                // ========================================================================
+                if (checkSupabaseConfig() && wasLoggedIn && getSupabaseClient()) {
+                    if (!realtimeManager.isStarted) {
+                        console.log('🔄 Starting real-time subscriptions after data load...');
+                        realtimeManager.start();
+                    } else {
+                        console.log('✅ Real-time subscriptions already active');
+                    }
+                }
+                
                 // Verify realtime subscriptions status (check after a delay to allow subscriptions to establish)
                 setTimeout(() => {
                     if (checkSupabaseConfig()) {
@@ -7193,14 +7192,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (realtimeManager.isStarted) {
                             console.log('✅ Real-time subscriptions active');
                         } else {
-                            console.warn('⚠️ Real-time subscriptions not active - attempting to start...');
-                            // Defensive: try to start if not already started
-                            realtimeManager.start();
-                            setTimeout(() => {
-                                if (realtimeManager.isStarted) {
-                                    console.log('✅ Real-time subscriptions started');
-                                } else {
-                                    console.warn('⚠️ Real-time subscriptions still not active - sync may not work');
+                            console.warn('⚠️ Real-time subscriptions not active - sync may not work');
                                     console.warn('💡 Check: 1) Real-time enabled in Supabase, 2) RLS policies allow SELECT');
                                 }
                             }, 3000);
