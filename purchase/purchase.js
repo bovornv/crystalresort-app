@@ -713,11 +713,7 @@ function setupRealtimeSubscriptions() {
         .subscribe((status, err) => {
             if (status === 'SUBSCRIBED') {
                 realtimeSubscribed = true;
-                // Log once when subscribed
-                if (!window.realtimeSubscribedLogged) {
-                    console.log('✅ Real-time subscribed: purchase_items');
-                    window.realtimeSubscribedLogged = true;
-                }
+                // Real-time subscription successful (no console log to reduce noise)
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                 realtimeSubscribed = false;
                 console.error('❌ Real-time subscription error:', status, err);
@@ -6201,13 +6197,7 @@ function checkMobileScreen() {
 
 // Initialize app on load v2
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🎬 DOMContentLoaded - App initializing...');
-    console.log('📦 Supabase client check:', {
-        clientInstance: !!supabaseClientInstance,
-        supabaseClientGlobal: typeof supabaseClient !== 'undefined',
-        url: SUPABASE_URL?.substring(0, 30) + '...',
-        key: SUPABASE_ANON_KEY?.substring(0, 20) + '...'
-    });
+    // Removed verbose console logs for cleaner console
     
     // Force Thai language - language switcher is hidden
     currentLanguage = 'th';

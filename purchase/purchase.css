@@ -183,6 +183,8 @@ body {
     align-items: center;
     visibility: visible !important;
     opacity: 1 !important;
+    z-index: 1002;
+    pointer-events: auto;
 }
 
 .user-menu-btn {
@@ -207,6 +209,12 @@ body {
     justify-content: center;
     transition: all 0.15s;
     white-space: normal;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    pointer-events: auto;
+    position: relative;
+    z-index: 1002;
 }
 
 .user-menu-btn:hover {
@@ -307,21 +315,31 @@ body {
     .login-btn-top {
         padding: 6px 12px;
         font-size: 13px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
     }
     
     .user-menu-btn {
-        padding: 6px 10px;
+        padding: 8px 12px;
         font-size: 13px;
         max-width: 150px;
+        min-height: 40px;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+        z-index: 1002;
+        pointer-events: auto;
     }
     
     .user-menu-dropdown {
         min-width: 180px;
         right: 0;
+        z-index: 1003;
     }
     
     .user-menu-container {
         display: flex !important;
+        z-index: 1002;
+        pointer-events: auto;
     }
 }
 
