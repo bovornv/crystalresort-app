@@ -3712,6 +3712,7 @@ textarea {
     }
     
     /* Supplier group header for mobile - light divider, not a section */
+    .supplier-group-header,
     .supplier-group-header-mobile {
         padding: 6px 16px;
         margin: 16px 0 8px 0;
