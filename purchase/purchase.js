@@ -6369,6 +6369,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const userMenuContainer = document.getElementById('userMenuContainer');
         const userMenuDropdown = document.getElementById('userMenuDropdown');
         const userMenuBtn = document.getElementById('userMenuBtn');
+        const userMenuItem = event.target.closest('.user-menu-item');
+        
+        // Don't close if clicking on logout button - let its handler work
+        if (userMenuItem && (userMenuItem.onclick || event.target.closest('[onclick*="handleLogout"]'))) {
+            return; // Let the onclick handler handle it
+        }
         
         if (userMenuContainer && userMenuDropdown && userMenuBtn) {
             const clickedInside = userMenuContainer.contains(event.target) || 
@@ -6379,19 +6385,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Small delay for mobile to prevent immediate closing
                 clearTimeout(clickOutsideTimeout);
                 clickOutsideTimeout = setTimeout(() => {
-            closeUserMenu();
+                    closeUserMenu();
                 }, 150);
             } else {
                 clearTimeout(clickOutsideTimeout);
             }
         }
-    });
+    }, true); // Use capture phase to handle before other handlers
     
     // Also handle touch events for mobile
     document.addEventListener('touchstart', function(event) {
         const userMenuContainer = document.getElementById('userMenuContainer');
         const userMenuDropdown = document.getElementById('userMenuDropdown');
         const userMenuBtn = document.getElementById('userMenuBtn');
+        const userMenuItem = event.target.closest('.user-menu-item');
+        
+        // Don't close if touching logout button - let its handler work
+        if (userMenuItem && (userMenuItem.onclick || event.target.closest('[onclick*="handleLogout"]'))) {
+            return; // Let the onclick handler handle it
+        }
         
         if (userMenuContainer && userMenuDropdown && userMenuBtn) {
             const touchedInside = userMenuContainer.contains(event.target) || 
@@ -6407,7 +6419,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 clearTimeout(clickOutsideTimeout);
             }
         }
-    });
+    }, true); // Use capture phase
     
     // Listen for window resize to re-render cards with correct mobile/desktop layout
     let resizeTimeout;
