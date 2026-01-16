@@ -1483,7 +1483,7 @@ const translations = {
         'invalid': 'ไม่ถูกต้อง',
         'unassigned': 'ยังไม่ได้มอบหมาย',
         'requested': 'จำนวนที่ขอ',
-        'received': 'รับของถูกต้อง',
+        'received': 'ของที่เพิ่งรับมาถูกต้อง',
         'difference': 'ส่วนต่าง',
         'quality': 'คุณภาพ',
         'freshOk': 'สด / ดี',
