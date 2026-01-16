@@ -4121,7 +4121,12 @@ async function moveItem(itemId, newStatus) {
 async function deleteItem(itemId) {
     if (!requireAuth(() => true)) return;
     
-    // All logged-in users can delete items
+    // Only admin and manager can delete items
+    if (!isAdminOrManager()) {
+        showNotification('Only admins and managers can delete items', 'error');
+        return;
+    }
+    
     if (confirm(t('confirmDeleteItem'))) {
         const item = items.find(i => i.id === itemId);
         console.log('🗑️ Item deleted:', {
@@ -4724,7 +4729,12 @@ function showStatsModal() {
         return;
     }
     
-    // All logged-in users can view purchase history
+    // Only admin and manager can view purchase history
+    if (!isAdminOrManager()) {
+        showNotification('Only admins and managers can view purchase history', 'error');
+        return;
+    }
+    
     try {
         renderStatsDashboard();
         const modal = document.getElementById('statsModal');
