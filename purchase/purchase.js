@@ -831,7 +831,7 @@ function setupRealtimeSubscriptions() {
                         detectAndUpdateIssueStatus(items[index]);
                         
                         // CRITICAL: Re-render UI immediately to reflect state changes
-                    renderBoard();
+                        renderBoard();
                         updatePresenceIndicator();
                         
                         // Refresh views if active
@@ -839,6 +839,15 @@ function setupRealtimeSubscriptions() {
                             renderDashboard();
                         } else if (currentView === 'mobile') {
                             renderMobileView();
+                        }
+                    } else {
+                        // Item doesn't exist locally - add it (might be from another device)
+                        const hasValidName = updatedItem.name && 
+                                           updatedItem.name.trim() !== '' && 
+                                           updatedItem.name !== 'Unknown Item';
+                        if (hasValidName) {
+                            items.push(updatedItem);
+                            renderBoard();
                         }
                     } else {
                         // Item doesn't exist locally - add it (might be from another device)
