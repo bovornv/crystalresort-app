@@ -85,14 +85,14 @@
                 <div class="top-bar-date" id="todayDate"></div>
             </div>
             <div class="top-bar-right">
-                <!-- Login Button (shown when not logged in) -->
+                <!-- Login Button (shown when not logged in) - matching roomstatus pattern -->
                 <button class="login-btn-top" id="loginBtnTop" onclick="showLoginModal()" style="display: none;">
-                    <span data-i18n="login">เข้าสู่ระบบ</span>
+                    👤 <span data-i18n="login">เข้าสู่ระบบ</span>
                 </button>
-                <!-- User Menu (shown when logged in) -->
+                <!-- User Menu (shown when logged in) - matching roomstatus pattern -->
                 <div class="user-menu-container" id="userMenuContainer" style="display: none;">
                     <button class="user-menu-btn" id="userMenuBtn" onclick="toggleUserMenu(event)" title="คลิกเพื่อดูเมนู" type="button">
-                        <span id="userMenuNickname">U</span>
+                        <span id="userMenuNickname"></span>
                     </button>
                     <div class="user-menu-dropdown" id="userMenuDropdown">
                         <div class="user-menu-header">

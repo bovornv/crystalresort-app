@@ -200,11 +200,11 @@ body {
     min-width: auto;
     min-height: 36px;
     height: auto;
-    padding: 6px 12px;
-    border-radius: 6px;
-    border: 1px solid #e9e9e7;
-    background-color: #f7f6f3;
-    color: #37352f;
+    padding: 8px 16px;
+    border-radius: 9999px; /* rounded-full like roomstatus */
+    border: none;
+    background-color: #15803D; /* Green like roomstatus */
+    color: #ffffff;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -216,7 +216,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    gap: 8px; /* Space between icon, text, and dropdown arrow */
+    transition: background-color 0.15s;
     white-space: normal;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
@@ -224,6 +225,18 @@ body {
     pointer-events: auto;
     position: relative;
     z-index: 1002;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.user-menu-btn::before {
+    content: '👤';
+    font-size: 14px;
+}
+
+.user-menu-btn::after {
+    content: '▼';
+    font-size: 10px;
+    opacity: 0.8;
 }
 
 .user-menu-btn:hover {

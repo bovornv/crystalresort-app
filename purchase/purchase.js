@@ -834,54 +834,38 @@ window.addEventListener('offline', () => {
     showNotification('Offline mode - changes will sync when online', 'info');
 });
 
-// Authentication System with Supabase Auth
-async function loadUser() {
-    if (!checkSupabaseConfig()) {
-        // Fallback: try localStorage for backward compatibility
-        const stored = localStorage.getItem('kitchen_procurement_user');
-    if (stored) {
-        try {
-                const userData = JSON.parse(stored);
-                currentUser = { nickname: userData.nickname, email: userData.email || userData.nickname };
-                userRole = 'staff';
-            return true;
-        } catch (e) {
-                console.error('Error loading user from localStorage:', e);
-            }
-        }
+// Simple nickname-based authentication (matching roomstatus pattern)
+function loadUser() {
+    // Check localStorage for nickname (matching roomstatus pattern)
+    const storedNickname = localStorage.getItem('crystal_nickname') || localStorage.getItem('nickname');
+    const loginTimestamp = localStorage.getItem('crystal_login_timestamp');
+    const logoutTimestamp = localStorage.getItem('crystal_logout_timestamp');
+    
+    // Check if user was logged out on another device/tab
+    if (storedNickname && loginTimestamp && logoutTimestamp) {
+        const loginTime = parseInt(loginTimestamp);
+        const logoutTime = parseInt(logoutTimestamp);
+        
+        // If logout happened after login, user is logged out
+        if (logoutTime > loginTime) {
+            localStorage.removeItem('crystal_nickname');
+            localStorage.removeItem('nickname');
+            localStorage.removeItem('crystal_login_timestamp');
+            currentUser = null;
+            userRole = 'staff';
             return false;
         }
+    }
     
-    try {
-        const { data: { user }, error } = await supabaseClientInstance.auth.getUser();
-        if (error) throw error;
-        
-        if (user) {
-            currentUser = user;
-            // Load user profile and role
-            const { data: profile } = await supabaseClientInstance
-                .from('users')
-                .select('nickname, role')
-                .eq('id', user.id)
-                .single();
-            
-            if (profile) {
-                userRole = profile.role || 'staff';
-                currentUser.nickname = profile.nickname || user.email?.split('@')[0] || 'User';
-            } else {
-                userRole = 'staff';
-                currentUser.nickname = user.email?.split('@')[0] || 'User';
-            }
-            
-            // Start presence tracking
-            startPresenceTracking();
-            return true;
+    if (storedNickname) {
+        currentUser = { nickname: storedNickname };
+        userRole = 'staff';
+        return true;
     }
+    
+    currentUser = null;
+    userRole = 'staff';
     return false;
-    } catch (e) {
-        console.error('Error loading user:', e);
-    return false;
-    }
 }
 
 // Sign up new user
@@ -1022,138 +1006,112 @@ function closeLoginModal() {
     document.getElementById('loginForm').reset();
 }
 
-// Handle login form submission
-async function handleLogin(event) {
+// Handle login (matching roomstatus pattern)
+function handleLogin(event) {
     event.preventDefault();
     const nicknameInput = document.getElementById('nicknameInput');
     
     if (!nicknameInput) {
-        showNotification('Login form not found', 'error');
         return;
     }
     
     const nickname = nicknameInput.value.trim();
     if (!nickname) {
-        showNotification(t('pleaseEnterNickname'), 'error');
         return;
     }
     
-    // Use simple nickname-based auth (localStorage mode)
-    currentUser = { nickname, email: nickname };
+    // Simple nickname-based login (matching roomstatus)
+    const trimmedNickname = nickname.trim();
+    const loginTimestamp = new Date().getTime();
+    
+    currentUser = { nickname: trimmedNickname };
     userRole = 'staff';
-    localStorage.setItem('kitchen_procurement_user', JSON.stringify({ nickname, email: nickname, role: 'staff' }));
+    
+    // Store in localStorage (matching roomstatus pattern)
+    localStorage.setItem('crystal_nickname', trimmedNickname);
+    localStorage.setItem('crystal_login_timestamp', loginTimestamp.toString());
+    
+    // Clean up old storage keys for consistency
+    localStorage.removeItem('kitchen_procurement_user');
+    localStorage.removeItem('crystal_logout_timestamp');
     
     closeLoginModal();
     updateUserUI();
-    showAllContent(); // Show app container after login
-    showNotification(t('loginSuccess'), 'success');
+    showAllContent();
     
-    // Initialize view and render content
-    // Load data from Supabase if configured
+    // Load data from Supabase if configured (but don't block on it)
     loadData().then(() => {
         loadTemplates();
         switchView('board');
     }).catch((error) => {
-        console.error('Error loading data after login:', error);
-        showAllContent(); // Ensure content is visible even on error
+        // Silently continue even if data load fails
         loadTemplates();
         switchView('board');
     });
 }
 
-// Handle logout
-async function handleLogout(event) {
+// Handle logout (matching roomstatus pattern)
+function handleLogout(event) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
-        event.stopImmediatePropagation();
     }
     
     // Close dropdown immediately
     closeUserMenu();
     
-    // Small delay to ensure dropdown closes
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Simple logout (matching roomstatus pattern)
+    const logoutTimestamp = new Date().getTime();
     
-    // Sign out
-    await signOut();
+    // Clear user state
+    currentUser = null;
+    userRole = 'staff';
     
-    // Clear all user UI elements
-    const userMenuContainer = document.getElementById('userMenuContainer');
-    const userMenuNickname = document.getElementById('userMenuNickname');
-    const userMenuName = document.getElementById('userMenuName');
-    const loginBtnTop = document.getElementById('loginBtnTop');
+    // Store logout timestamp to sync across devices/tabs
+    localStorage.setItem('crystal_logout_timestamp', logoutTimestamp.toString());
+    localStorage.removeItem('crystal_nickname');
+    localStorage.removeItem('nickname');
+    localStorage.removeItem('crystal_login_timestamp');
     
-    // Hide user menu completely - remove from layout
-    if (userMenuContainer) {
-        userMenuContainer.style.display = 'none';
-        userMenuContainer.style.visibility = 'hidden';
-        userMenuContainer.style.opacity = '0';
-        userMenuContainer.style.width = '0';
-        userMenuContainer.style.height = '0';
-        userMenuContainer.style.margin = '0';
-        userMenuContainer.style.padding = '0';
-        userMenuContainer.style.overflow = 'hidden';
-    }
+    // Clean up old storage keys
+    localStorage.removeItem('kitchen_procurement_user');
     
-    // Clear nickname text
-    if (userMenuNickname) {
-        userMenuNickname.textContent = '';
-    }
-    if (userMenuName) {
-        userMenuName.textContent = '';
-    }
-    
-    // Show login button
-    if (loginBtnTop) {
-        loginBtnTop.style.display = 'flex';
-        loginBtnTop.style.visibility = 'visible';
-        loginBtnTop.style.opacity = '1';
-    }
-    
-    // Update UI
+    // Update UI immediately
     updateUserUI();
     
-    // Show notification and login modal
-    showNotification(t('logoutSuccess'), 'info');
+    // Hide content and show login modal
     hideAllContent();
     showLoginModal();
 }
 
-// Update user UI elements
+// Update user UI elements (matching roomstatus pattern)
 function updateUserUI() {
     const userMenuContainer = document.getElementById('userMenuContainer');
     const loginBtnTop = document.getElementById('loginBtnTop');
     const userMenuName = document.getElementById('userMenuName');
     const userMenuNickname = document.getElementById('userMenuNickname');
-    const currentUserSpan = document.getElementById('currentUser');
     
-    if (isLoggedIn()) {
-        const displayName = currentUser.nickname || currentUser.email?.split('@')[0] || 'User';
-        const roleBadge = userRole === 'admin' ? ' [Admin]' : userRole === 'manager' ? ' [Manager]' : '';
+    if (isLoggedIn() && currentUser && currentUser.nickname) {
+        const displayName = currentUser.nickname;
         
         // Show user menu, hide login button
         if (userMenuContainer) {
             userMenuContainer.style.display = 'flex';
             userMenuContainer.style.visibility = 'visible';
             userMenuContainer.style.opacity = '1';
+            userMenuContainer.style.width = 'auto';
+            userMenuContainer.style.height = 'auto';
+            userMenuContainer.style.margin = '';
+            userMenuContainer.style.padding = '';
+            userMenuContainer.style.overflow = 'visible';
         }
         if (loginBtnTop) {
             loginBtnTop.style.display = 'none';
             loginBtnTop.style.visibility = 'hidden';
             loginBtnTop.style.opacity = '0';
         }
-        if (userMenuName) userMenuName.textContent = displayName + roleBadge;
-        // Show full nickname instead of initials
+        if (userMenuName) userMenuName.textContent = displayName;
         if (userMenuNickname) userMenuNickname.textContent = displayName;
-        if (currentUserSpan) currentUserSpan.textContent = displayName;
-        
-        // Show/hide admin-only features
-        const statsBtn = document.querySelector('button[onclick="showStatsModal()"]');
-        const weeklyReviewBtn = document.querySelector('button[onclick="showWeeklyReviewModal()"]');
-        // Make all buttons visible for all users
-        if (statsBtn) statsBtn.style.display = 'inline-flex';
-        if (weeklyReviewBtn) weeklyReviewBtn.style.display = 'inline-flex';
         
         // Show app content
         const appContainer = document.querySelector('.app-container');
@@ -1178,7 +1136,6 @@ function updateUserUI() {
             userMenuContainer.style.margin = '0';
             userMenuContainer.style.padding = '0';
             userMenuContainer.style.overflow = 'hidden';
-            // Close dropdown if open
             closeUserMenu();
         }
         if (loginBtnTop) {
@@ -1189,7 +1146,6 @@ function updateUserUI() {
         // Clear all user-related text
         if (userMenuNickname) userMenuNickname.textContent = '';
         if (userMenuName) userMenuName.textContent = '';
-        if (currentUserSpan) currentUserSpan.textContent = '';
         
         // Hide app content
         const appContainer = document.querySelector('.app-container');
@@ -6290,25 +6246,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 50);
     
-    // Check authentication (async)
-    loadUser().then((wasLoggedIn) => {
+    // Check authentication (matching roomstatus pattern - synchronous)
+    const wasLoggedIn = loadUser();
+    
     if (!wasLoggedIn) {
-        // User not logged in - show login modal and hide content
+        // User not logged in - hide content, don't auto-show login modal
         hideAllContent();
-        showLoginModal();
+        // Don't auto-show login modal - user clicks button instead (matching roomstatus)
     } else {
         // User logged in - show content
         updateUserUI();
-        showAllContent(); // Ensure app container is visible
+        showAllContent();
     
     // Load data (async - will load from Supabase if configured)
         setTimeout(() => {
             loadData().then(() => {
                 loadTemplates();
-                // Set initial view to board (Procurement Board) only if logged in
-                // Don't auto-switch to mobile - user can manually switch if needed
                 switchView('board');
-                // Force a re-render after a short delay to ensure mobile view is visible
                 setTimeout(() => {
                     const boardView = document.getElementById('boardView');
                     if (boardView && boardView.classList.contains('force-show')) {
@@ -6316,19 +6270,23 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }, 50);
             }).catch((error) => {
-                console.error('Error loading data:', error);
-                // Fallback: still try to render if logged in
-                showAllContent();
+                // Silently continue even if data load fails
                 loadTemplates();
                 switchView('board');
             });
-        }, 100); // Small delay to ensure DOM is ready
+        }, 100);
     }
-    }).catch((error) => {
-        console.error('Error checking authentication:', error);
-        hideAllContent();
-        showLoginModal();
-    });
+    
+    // Check for logout events periodically (matching roomstatus pattern)
+    setInterval(() => {
+        const wasLoggedInBefore = isLoggedIn();
+        const isLoggedInNow = loadUser();
+        if (wasLoggedInBefore && !isLoggedInNow) {
+            // User was logged out (e.g., on another tab)
+            updateUserUI();
+            hideAllContent();
+        }
+    }, 5000); // Check every 5 seconds
     
     updateTodayDate();
     // Update time every minute
@@ -6385,7 +6343,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Small delay for mobile to prevent immediate closing
                 clearTimeout(clickOutsideTimeout);
                 clickOutsideTimeout = setTimeout(() => {
-                    closeUserMenu();
+            closeUserMenu();
                 }, 150);
             } else {
                 clearTimeout(clickOutsideTimeout);
