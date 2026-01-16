@@ -1199,6 +1199,12 @@ function showAllContent() {
         appContainer.style.display = 'block';
         appContainer.style.visibility = 'visible';
     }
+    
+    // Ensure board view is visible
+    const boardView = document.getElementById('boardView');
+    if (boardView) {
+        boardView.style.display = 'block';
+    }
 }
 
 // Authentication check wrapper for functions that modify data
@@ -6257,22 +6263,24 @@ document.addEventListener('DOMContentLoaded', function() {
         // User logged in - show content
         updateUserUI();
         showAllContent();
-    
-    // Load data (async - will load from Supabase if configured)
+        
+        // Ensure board view is visible immediately
+        const boardView = document.getElementById('boardView');
+        if (boardView) {
+            boardView.style.display = 'block';
+        }
+        
+        // Load data (async - will load from Supabase if configured)
         setTimeout(() => {
             loadData().then(() => {
                 loadTemplates();
                 switchView('board');
-                setTimeout(() => {
-                    const boardView = document.getElementById('boardView');
-                    if (boardView && boardView.classList.contains('force-show')) {
-                        renderBoard();
-                    }
-                }, 50);
+                renderBoard(); // Always render board after data loads
             }).catch((error) => {
                 // Silently continue even if data load fails
                 loadTemplates();
                 switchView('board');
+                renderBoard(); // Render board even if data load fails
             });
         }, 100);
     }
