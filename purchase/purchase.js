@@ -186,13 +186,22 @@ async function saveItemToSupabase(item, source = 'user') {
     const skipHistoryInsert = source === 'saveData';
     
     // Debounce: Skip if same item + same status was just saved
+    // Increased debounce time to prevent excessive requests
     const saveKey = `${item.id}:${item.status}`;
     const lastSave = lastSaveState.get(saveKey);
     const now = Date.now();
-    if (lastSave && (now - lastSave) < 1000) {
-        return false; // Skip duplicate save within 1 second
+    if (lastSave && (now - lastSave) < 3000) {
+        return false; // Skip duplicate save within 3 seconds (increased from 1 second)
     }
     lastSaveState.set(saveKey, now);
+    
+    // Also check if this exact item data was just saved (prevent duplicate saves of same data)
+    const itemDataHash = `${item.id}:${item.status}:${item.quantity}:${item.unit}:${item.supplier}`;
+    const lastDataSave = lastSaveState.get(`data_${itemDataHash}`);
+    if (lastDataSave && (now - lastDataSave) < 2000) {
+        return false; // Skip if same data was saved within 2 seconds
+    }
+    lastSaveState.set(`data_${itemDataHash}`, now);
     
     try {
         // Try to get user, but don't fail if not authenticated
@@ -358,10 +367,10 @@ async function saveItemToSupabase(item, source = 'user') {
         
         // Track this as a local update to prevent processing our own real-time events
         lastLocalUpdateIds.add(item.id);
-        // Clear after 1 second to allow faster sync across devices
+        // Clear after 2 seconds to allow sync across devices (increased from 1 second)
         setTimeout(() => {
             lastLocalUpdateIds.delete(item.id);
-        }, 1000);
+        }, 2000);
         
         // When status changes to 'received', insert snapshot into purchase_history
         // Only insert if we haven't already inserted history for this item recently
