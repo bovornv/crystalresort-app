@@ -612,10 +612,11 @@ function setupRealtimeSubscriptions() {
                     return; // This is our own update, ignore it
                 }
                 
-                // Log once when applying remote change
-                if (!window.realtimeApplyLogged) {
-                    console.log('✅ Applying remote change to UI');
-                    window.realtimeApplyLogged = true;
+                // Log real-time events for debugging (first few only)
+                if (!window.realtimeEventCount) window.realtimeEventCount = 0;
+                window.realtimeEventCount++;
+                if (window.realtimeEventCount <= 3) {
+                    console.log(`✅ Real-time ${payload.eventType} received:`, itemId, payload.new?.item_name || payload.old?.item_name || 'N/A');
                 }
                 
                 if (payload.eventType === 'INSERT') {
