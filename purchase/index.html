@@ -45,6 +45,11 @@
             visibility: visible !important;
             opacity: 1 !important;
         }
+        .login-btn-top {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
         @media (min-width: 641px) {
             .top-bar-content {
                 flex-direction: row !important;
@@ -66,6 +71,11 @@
                 visibility: visible !important;
                 opacity: 1 !important;
             }
+            .login-btn-top {
+                display: flex !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+            }
         }
     </style>
 </head>
@@ -79,6 +89,11 @@
                 <div class="top-bar-date" id="todayDate"></div>
             </div>
             <div class="top-bar-right">
+                <!-- Login Button (shown when not logged in) -->
+                <button class="login-btn-top" id="loginBtnTop" onclick="showLoginModal()" style="display: none;">
+                    <span data-i18n="login">เข้าสู่ระบบ</span>
+                </button>
+                <!-- User Menu (shown when logged in) -->
                 <div class="user-menu-container" id="userMenuContainer" style="display: none;">
                     <button class="user-menu-btn" id="userMenuBtn" onclick="toggleUserMenu()">
                         <span id="userMenuNickname">U</span>

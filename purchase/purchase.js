@@ -35,15 +35,15 @@ function initializeSupabaseClient() {
         return;
     }
     
-    try {
-        if (SUPABASE_URL && SUPABASE_ANON_KEY && 
+try {
+    if (SUPABASE_URL && SUPABASE_ANON_KEY && 
             SUPABASE_URL.startsWith('https://') && 
             SUPABASE_ANON_KEY.startsWith('eyJ')) {
             // Create client ONCE - never recreate
             supabaseClientInstance = supabaseLib.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             window.supabaseInitRetries = 0; // Reset retry counter on success
-        }
-    } catch (e) {
+    }
+} catch (e) {
         console.error('❌ Error creating Supabase client:', e);
     }
 }
@@ -396,12 +396,12 @@ async function loadPurchaseRecordsFromSupabase() {
         } catch (e) {
             // If ordering fails, try without order or by id
             if (e.code === '42703') {
-                const { data, error } = await supabaseClientInstance
+        const { data, error } = await supabaseClientInstance
                     .from('purchase_history')
-                    .select('*')
+            .select('*')
                     .order('id', { ascending: false });
-                if (error) throw error;
-                return data || [];
+        if (error) throw error;
+        return data || [];
             }
             throw e;
         }
@@ -566,7 +566,7 @@ function setupRealtimeSubscriptions() {
     // Clean up any existing subscriptions first
     realtimeSubscriptions.forEach(sub => {
         try {
-            supabaseClientInstance.removeChannel(sub);
+        supabaseClientInstance.removeChannel(sub);
         } catch (e) {
             // Silent cleanup
         }
@@ -683,7 +683,7 @@ function setupRealtimeSubscriptions() {
                         }
                         
                         // CRITICAL: Re-render UI to reflect state changes
-                        renderBoard();
+                    renderBoard();
                         updatePresenceIndicator();
                         
                         // Refresh views if active (same as local updates)
@@ -807,7 +807,7 @@ window.addEventListener('online', () => {
     if (checkSupabaseConfig() && supabaseClientInstance) {
         // Reconnect real-time subscriptions if not already subscribed
         if (!realtimeSubscribed) {
-            setupRealtimeSubscriptions();
+        setupRealtimeSubscriptions();
         }
         loadData().catch(err => console.error('Error loading data on online:', err));
     }
@@ -884,7 +884,7 @@ async function loadUser() {
     return false;
     } catch (e) {
         console.error('Error loading user:', e);
-        return false;
+    return false;
     }
 }
 
@@ -1078,6 +1078,7 @@ async function handleLogout() {
 // Update user UI elements
 function updateUserUI() {
     const userMenuContainer = document.getElementById('userMenuContainer');
+    const loginBtnTop = document.getElementById('loginBtnTop');
     const userMenuName = document.getElementById('userMenuName');
     const userMenuNickname = document.getElementById('userMenuNickname');
     const currentUserSpan = document.getElementById('currentUser');
@@ -1086,8 +1087,9 @@ function updateUserUI() {
         const displayName = currentUser.nickname || currentUser.email?.split('@')[0] || 'User';
         const roleBadge = userRole === 'admin' ? ' [Admin]' : userRole === 'manager' ? ' [Manager]' : '';
         
-        // Show user menu
+        // Show user menu, hide login button
         if (userMenuContainer) userMenuContainer.style.display = 'flex';
+        if (loginBtnTop) loginBtnTop.style.display = 'none';
         if (userMenuName) userMenuName.textContent = displayName + roleBadge;
         // Show full nickname instead of initials
         if (userMenuNickname) userMenuNickname.textContent = displayName;
@@ -1113,8 +1115,9 @@ function updateUserUI() {
             boardView.style.display = 'block';
         }
     } else {
-        // Hide user menu
+        // Hide user menu, show login button
         if (userMenuContainer) userMenuContainer.style.display = 'none';
+        if (loginBtnTop) loginBtnTop.style.display = 'flex';
         if (currentUserSpan) currentUserSpan.textContent = '';
         
         // Hide app content
@@ -2734,37 +2737,37 @@ function renderBoard() {
     // Sections that should be grouped by supplier (mobile, tablet, and desktop)
     const groupedSections = ['need-to-buy', 'ordered', 'bought', 'received'];
 
-    // Separate items by status
-    const groupedSectionItems = {};
-    const otherItems = [];
-    
-    sortedItems.forEach(item => {
-        if (groupedSections.includes(item.status)) {
-            if (!groupedSectionItems[item.status]) {
-                groupedSectionItems[item.status] = [];
+        // Separate items by status
+        const groupedSectionItems = {};
+        const otherItems = [];
+        
+        sortedItems.forEach(item => {
+            if (groupedSections.includes(item.status)) {
+                if (!groupedSectionItems[item.status]) {
+                    groupedSectionItems[item.status] = [];
+                }
+                groupedSectionItems[item.status].push(item);
+            } else {
+                otherItems.push(item);
             }
-            groupedSectionItems[item.status].push(item);
-        } else {
-            otherItems.push(item);
-        }
-    });
-    
+        });
+        
     // Render grouped sections (for all screen sizes)
-    groupedSections.forEach(status => {
-        const fragment = fragmentMap[status];
-        const items = groupedSectionItems[status] || [];
-        if (fragment && items.length > 0) {
-            renderGroupedBySupplier(items, fragment);
-        }
-    });
-    
-    // Render other items normally
-    otherItems.forEach(item => {
-        const fragment = fragmentMap[item.status];
-        if (fragment) {
-            fragment.appendChild(createItemCard(item));
-        }
-    });
+        groupedSections.forEach(status => {
+            const fragment = fragmentMap[status];
+            const items = groupedSectionItems[status] || [];
+            if (fragment && items.length > 0) {
+                renderGroupedBySupplier(items, fragment);
+            }
+        });
+        
+        // Render other items normally
+        otherItems.forEach(item => {
+            const fragment = fragmentMap[item.status];
+            if (fragment) {
+                fragment.appendChild(createItemCard(item));
+            }
+        });
 
     // Append fragments to containers (single DOM operation per column)
     COLUMN_ORDER.forEach(colId => {
@@ -3325,59 +3328,59 @@ async function handleAddItem(event) {
     isSubmittingAddItem = true;
     
     try {
-        const name = document.getElementById('itemName').value.trim();
-        const quantity = parseFloat(document.getElementById('itemQuantity').value);
-        const unit = document.getElementById('itemUnit').value;
-        const supplier = document.getElementById('itemSupplier').value;
-        
-        // Validate input
-        const errors = validateItemInput(name, quantity, unit, supplier);
-        if (errors.length > 0) {
-            showNotification(errors.join(', '), 'error');
-            return;
-        }
-        
-        const now = Date.now();
-        const newItem = {
-            id: generateId(),
-            name: name,
-            quantity: quantity,
-            requested_qty: quantity,
-            unit: unit,
-            supplier: supplier,
-            urgency: document.getElementById('itemUrgency').checked ? 'urgent' : 'normal',
-            notes: document.getElementById('itemNotes').value.trim() || null,
-            status: 'need-to-buy',
-            received_qty: 0,
-            actualQuantity: 0, // Keep for backward compatibility
-            issue: false,
-            issue_type: null,
-            issueReason: null,
-            qualityCheck: null,
-            statusTimestamps: {
-                'need-to-buy': now
-            },
+    const name = document.getElementById('itemName').value.trim();
+    const quantity = parseFloat(document.getElementById('itemQuantity').value);
+    const unit = document.getElementById('itemUnit').value;
+    const supplier = document.getElementById('itemSupplier').value;
+    
+    // Validate input
+    const errors = validateItemInput(name, quantity, unit, supplier);
+    if (errors.length > 0) {
+        showNotification(errors.join(', '), 'error');
+        return;
+    }
+    
+    const now = Date.now();
+    const newItem = {
+        id: generateId(),
+        name: name,
+        quantity: quantity,
+        requested_qty: quantity,
+        unit: unit,
+        supplier: supplier,
+        urgency: document.getElementById('itemUrgency').checked ? 'urgent' : 'normal',
+        notes: document.getElementById('itemNotes').value.trim() || null,
+        status: 'need-to-buy',
+        received_qty: 0,
+        actualQuantity: 0, // Keep for backward compatibility
+        issue: false,
+        issue_type: null,
+        issueReason: null,
+        qualityCheck: null,
+        statusTimestamps: {
+            'need-to-buy': now
+        },
             lastUpdated: now,
             created_by_nickname: currentUser?.nickname || null
-        };
+    };
 
-        items.push(newItem);
-        
-        // Track history
-        addItemHistory(newItem.id, `Item created`, currentUser);
-        
+    items.push(newItem);
+    
+    // Track history
+    addItemHistory(newItem.id, `Item created`, currentUser);
+    
         // Save to Supabase if configured (single save)
-        if (checkSupabaseConfig()) {
+    if (checkSupabaseConfig()) {
             await saveItemToSupabase(newItem, 'user');
-        }
-        
+    }
+    
         // Save to localStorage (fallback only if Supabase not configured)
         if (!checkSupabaseConfig()) {
-            saveData().catch(err => console.error('Error saving data:', err));
+    saveData().catch(err => console.error('Error saving data:', err));
         }
-        renderBoard();
-        closeAddItemModal();
-        showNotification(t('itemAddedSuccess'), 'success');
+    renderBoard();
+    closeAddItemModal();
+    showNotification(t('itemAddedSuccess'), 'success');
     } finally {
         // Reset flag after a short delay to allow form reset
         setTimeout(() => {
@@ -3516,8 +3519,8 @@ function showReceivingModal(itemId) {
     document.getElementById('receivingItemId').value = item.id;
     
     // Set issue type and reason if they exist
-    document.getElementById('issueType').value = item.issue_type || '';
-    document.getElementById('issueReason').value = item.issueReason || '';
+        document.getElementById('issueType').value = item.issue_type || '';
+        document.getElementById('issueReason').value = item.issueReason || '';
 
     const modal = document.getElementById('receivingModal');
     modal.classList.add('active');
@@ -3787,7 +3790,7 @@ async function handleReceiving(event) {
 
     const now = Date.now();
     const requestedQty = item.requested_qty || item.quantity || 0;
-    
+
     // Update received quantity to full requested quantity
     item.received_qty = requestedQty;
     item.actualQuantity = requestedQty; // Keep for backward compatibility
@@ -3804,11 +3807,11 @@ async function handleReceiving(event) {
         item.statusTimestamps['received'] = now;
     }
     
-    // Move to verified/issue column
-    item.status = 'verified';
-    if (!item.statusTimestamps['verified']) {
-        item.statusTimestamps['verified'] = now;
-    }
+        // Move to verified/issue column
+        item.status = 'verified';
+        if (!item.statusTimestamps['verified']) {
+            item.statusTimestamps['verified'] = now;
+        }
     
     item.lastUpdated = now;
 
@@ -3817,7 +3820,7 @@ async function handleReceiving(event) {
     const action = `${t('received')} ${requestedQty} ${unitDisplay} - ${t('issues')}: ${getIssueTypeLabel(issueType) || issueType}`;
     addItemHistory(itemId, action, currentUser);
 
-    // Record purchase with issue status
+        // Record purchase with issue status
     await recordPurchase(item, 'Issue');
 
     // Save to Supabase if configured
@@ -3873,7 +3876,7 @@ async function moveItem(itemId, newStatus) {
     
     // Save to localStorage (fallback only if Supabase not configured)
     if (!checkSupabaseConfig()) {
-        saveData().catch(err => console.error('Error saving data:', err));
+    saveData().catch(err => console.error('Error saving data:', err));
     }
     renderBoard();
     
@@ -6211,11 +6214,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Check authentication (async)
     loadUser().then((wasLoggedIn) => {
-        if (!wasLoggedIn) {
-            // User not logged in - show login modal and hide content
-            hideAllContent();
-            showLoginModal();
-        } else {
+    if (!wasLoggedIn) {
+        // User not logged in - show login modal and hide content
+        hideAllContent();
+        showLoginModal();
+    } else {
         // User logged in - show content
         updateUserUI();
         showAllContent(); // Ensure app container is visible
@@ -6252,6 +6255,28 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTodayDate();
     // Update time every minute
     setInterval(updateTodayDate, 60000);
+    
+    // Auto-logout at midnight
+    function scheduleMidnightLogout() {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+        
+        const msUntilMidnight = tomorrow.getTime() - now.getTime();
+        
+        setTimeout(() => {
+            if (isLoggedIn()) {
+                handleLogout();
+                showNotification('ออกจากระบบอัตโนมัติเมื่อเที่ยงคืน', 'info');
+            }
+            // Schedule next midnight logout
+            scheduleMidnightLogout();
+        }, msUntilMidnight);
+    }
+    
+    // Start midnight logout scheduler
+    scheduleMidnightLogout();
     
     // Update presence indicator periodically
     setInterval(() => {
