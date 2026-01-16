@@ -203,9 +203,10 @@ async function saveItemToSupabase(item, source = 'user') {
             itemData.updated_by = user.id;
         }
         
-        // Track updated_by nickname for display
+        // Track updated_by nickname for display (save to database)
         if (currentUser?.nickname) {
             item.updated_by_nickname = currentUser.nickname;
+            itemData.updated_by_nickname = currentUser.nickname; // Save to database
         }
         
         // Only set created_by if this is a new item
@@ -213,6 +214,7 @@ async function saveItemToSupabase(item, source = 'user') {
             itemData.created_by = user.id;
             if (currentUser?.nickname) {
                 item.created_by_nickname = currentUser.nickname;
+                itemData.created_by_nickname = currentUser.nickname; // Save to database
             }
         }
         
