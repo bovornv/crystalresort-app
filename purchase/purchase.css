@@ -512,7 +512,8 @@ body {
 
 .app-container {
     min-height: 100vh;
-    padding: 16px; /* Match Room Status padding (p-4 = 16px) */
+    padding: 16px;
+    padding-bottom: calc(100px + env(safe-area-inset-bottom)); /* Space for fixed bottom bar */
     background-color: #F6F8FA; /* Match Room Status background */
 }
 
@@ -3263,6 +3264,19 @@ textarea {
     .filter-container,
     .actions-container {
         width: 100%;
+        gap: 8px;
+    }
+    
+    .action-header-btn {
+        min-width: calc(50% - 4px);
+        max-width: calc(50% - 4px);
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+    
+    .bottom-actions-bar {
+        padding: 12px 16px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom));
     }
 
     .supplier-filters {
