@@ -969,9 +969,9 @@ async function signOut() {
     localStorage.removeItem('kitchen_procurement_user');
 }
 
-// Check if user is logged in
+// Check if user is logged in (matching roomstatus pattern)
 function isLoggedIn() {
-    return currentUser !== null;
+    return currentUser !== null && currentUser !== undefined && currentUser.nickname;
 }
 
 // Check if user has admin/manager role
