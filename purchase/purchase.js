@@ -4927,7 +4927,11 @@ function showWeeklyReviewModal() {
         return;
     }
     
-    // All users can view reports
+    // Only admin and manager can view weekly review
+    if (!isAdminOrManager()) {
+        showNotification('Only admins and managers can view weekly review', 'error');
+        return;
+    }
     
     try {
         renderWeeklyReview();
