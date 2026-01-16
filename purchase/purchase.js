@@ -4260,20 +4260,12 @@ function updateActionButtonStates() {
         receiveBtn.disabled = !isLoggedInUser;
         receiveBtn.style.opacity = isLoggedInUser ? '1' : '0.5';
         receiveBtn.style.cursor = isLoggedInUser ? 'pointer' : 'not-allowed';
-        // Update onclick to show modal (not handleReceiveSelected)
-        if (isLoggedInUser) {
-            receiveBtn.onclick = showReceivedItemsModal;
-        }
     }
     
     if (issueBtn) {
         issueBtn.disabled = !isLoggedInUser;
         issueBtn.style.opacity = isLoggedInUser ? '1' : '0.5';
         issueBtn.style.cursor = isLoggedInUser ? 'pointer' : 'not-allowed';
-        // Update onclick to show modal (not handleIssueSelected)
-        if (isLoggedInUser) {
-            issueBtn.onclick = showIssueItemsModal;
-        }
     }
 }
 
