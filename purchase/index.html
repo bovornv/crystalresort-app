@@ -155,33 +155,14 @@
                 <div class="items-container collapsed" id="bought-items"></div>
             </div>
 
-            <!-- Received Column -->
-            <div class="column" data-column="received">
-                <div class="column-header" onclick="toggleColumn('received')">
-                    <div class="column-header-left">
-                        <button class="column-toggle-btn" data-column="received">▼</button>
-                        <h2><span data-i18n="received">Received</span> <span class="item-count" id="count-received">0</span></h2>
-                    </div>
-                </div>
-                <div class="items-container collapsed" id="received-items"></div>
-            </div>
-
-            <!-- Verified / Issue Column -->
-            <div class="column" data-column="verified">
-                <div class="column-header" onclick="toggleColumn('verified')">
-                    <div class="column-header-left">
-                        <button class="column-toggle-btn" data-column="verified">▼</button>
-                        <h2><span data-i18n="verified">Verified / Issue</span> <span class="item-count" id="count-verified">0</span></h2>
-                    </div>
-                </div>
-                <div class="items-container collapsed" id="verified-items"></div>
-            </div>
         </div>
         
         <div class="bottom-actions-bar">
             <div class="actions-container">
                 <button class="action-header-btn" onclick="showStatsModal()" data-i18n="viewPurchaseHistory" title="View Purchase History">📊 <span data-i18n="purchaseHistory">Purchase History</span></button>
                 <button class="action-header-btn" onclick="showWeeklyReviewModal()" data-i18n="viewWeeklyReview" title="View Weekly Review">📋 <span data-i18n="weeklyReview">Weekly Review</span></button>
+                <button class="action-header-btn" id="receiveBtn" onclick="handleReceiveSelected()" data-i18n="received" title="Mark selected items as received">✅ <span data-i18n="received">รับของถูกต้อง</span></button>
+                <button class="action-header-btn" id="issueBtn" onclick="handleIssueSelected()" data-i18n="verified" title="Report issue for selected items">⚠️ <span data-i18n="verified">มีปัญหา</span></button>
             </div>
         </div>
         </div>

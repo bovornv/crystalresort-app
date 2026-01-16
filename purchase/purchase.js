@@ -1267,7 +1267,7 @@ function getColumnLabel(status) {
 }
 
 // Column flow order
-const COLUMN_ORDER = ['need-to-buy', 'ordered', 'bought', 'received', 'verified'];
+const COLUMN_ORDER = ['need-to-buy', 'ordered', 'bought']; // Removed 'received' and 'verified' - now action buttons
 
 // Issue type labels for display (will use translations)
 function getIssueTypeLabel(issueType) {
@@ -2951,6 +2951,9 @@ function updateColumnCounts() {
             countElement.textContent = count;
         }
     });
+    
+    // Update action button states based on selection
+    updateActionButtonStates();
 }
 
 // Update statistics summary
@@ -3810,6 +3813,11 @@ function closeQuickIssueSheet() {
     const sheet = document.getElementById('quickIssueSheet');
     sheet.classList.remove('active');
     document.getElementById('quickIssueForm').reset();
+    
+    // Clear selection after modal closes
+    selectedItems.clear();
+    updateActionButtonStates();
+    renderBoard();
 }
 
 // Handle Quick Issue submission
@@ -4210,6 +4218,7 @@ function toggleItemSelection(itemId) {
     }
     
     updateBulkActionsButton();
+    updateActionButtonStates();
     
     // Update card visual state
     const card = document.querySelector(`[data-item-id="${itemId}"]`);
