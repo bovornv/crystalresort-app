@@ -849,15 +849,6 @@ function setupRealtimeSubscriptions() {
                             items.push(updatedItem);
                             renderBoard();
                         }
-                    } else {
-                        // Item doesn't exist locally - add it (might be from another device)
-                        const hasValidName = updatedItem.name && 
-                                           updatedItem.name.trim() !== '' && 
-                                           updatedItem.name !== 'Unknown Item';
-                        if (hasValidName) {
-                            items.push(updatedItem);
-                            renderBoard();
-                        }
                     }
                 } else if (payload.eventType === 'DELETE') {
                     // Real-time DELETE → remove item from state
