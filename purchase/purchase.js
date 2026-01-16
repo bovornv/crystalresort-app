@@ -6306,14 +6306,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 60000); // Update every minute
     
-    // Close user menu when clicking outside
+    // Close user menu when clicking outside (with delay for mobile)
+    let clickOutsideTimeout;
     document.addEventListener('click', function(event) {
         const userMenuContainer = document.getElementById('userMenuContainer');
         const userMenuDropdown = document.getElementById('userMenuDropdown');
-        if (userMenuContainer && userMenuDropdown && 
-            !userMenuContainer.contains(event.target) && 
-            userMenuDropdown.classList.contains('active')) {
-            closeUserMenu();
+        const userMenuBtn = document.getElementById('userMenuBtn');
+        
+        if (userMenuContainer && userMenuDropdown && userMenuBtn) {
+            const clickedInside = userMenuContainer.contains(event.target) || 
+                                 userMenuDropdown.contains(event.target) ||
+                                 userMenuBtn.contains(event.target);
+            
+            if (!clickedInside && userMenuDropdown.classList.contains('active')) {
+                // Small delay for mobile to prevent immediate closing
+                clearTimeout(clickOutsideTimeout);
+                clickOutsideTimeout = setTimeout(() => {
+                    closeUserMenu();
+                }, 150);
+            } else {
+                clearTimeout(clickOutsideTimeout);
+            }
+        }
+    });
+    
+    // Also handle touch events for mobile
+    document.addEventListener('touchstart', function(event) {
+        const userMenuContainer = document.getElementById('userMenuContainer');
+        const userMenuDropdown = document.getElementById('userMenuDropdown');
+        const userMenuBtn = document.getElementById('userMenuBtn');
+        
+        if (userMenuContainer && userMenuDropdown && userMenuBtn) {
+            const touchedInside = userMenuContainer.contains(event.target) || 
+                                 userMenuDropdown.contains(event.target) ||
+                                 userMenuBtn.contains(event.target);
+            
+            if (!touchedInside && userMenuDropdown.classList.contains('active')) {
+                clearTimeout(clickOutsideTimeout);
+                clickOutsideTimeout = setTimeout(() => {
+                    closeUserMenu();
+                }, 200);
+            } else {
+                clearTimeout(clickOutsideTimeout);
+            }
         }
     });
     
