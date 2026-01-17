@@ -2366,6 +2366,7 @@ header h1 {
 .items-container:not(.collapsed) {
     opacity: 1;
     display: flex; /* Show when expanded */
+    flex-direction: column; /* Stack items vertically */
     padding: 12px; /* Reduced padding for compact layout */
     max-height: calc(100vh - 280px) !important; /* Constrain height for scrolling */
     overflow-y: auto !important; /* Enable scrolling when expanded */
