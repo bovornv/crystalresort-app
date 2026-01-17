@@ -1139,12 +1139,33 @@ class RealtimeManager {
                         }
                 } else if (payload.eventType === 'DELETE') {
                         // Real-time DELETE → remove item from state
-                        const deletedId = payload.old.id;
-                        items = items.filter(i => i.id !== deletedId);
-                        
-                        // CRITICAL: Re-render UI to reflect state changes
-                    renderBoard();
-                        updatePresenceIndicator();
+                        const deletedId = payload.old?.id;
+                        if (deletedId) {
+                            const beforeCount = items.length;
+                            items = items.filter(i => i.id !== deletedId);
+                            const afterCount = items.length;
+                            
+                            // Log deletion for debugging
+                            console.log(`🗑️ RT DELETE: ${deletedId.substring(0, 8)} (${beforeCount} → ${afterCount} items)`);
+                            
+                            // CRITICAL: Update localStorage to prevent stale data on reload
+                            try {
+                                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                            } catch (e) {
+                                console.error('Error updating localStorage after realtime delete:', e);
+                            }
+                            
+                            // CRITICAL: Re-render UI to reflect state changes
+                            renderBoard();
+                            updatePresenceIndicator();
+                            
+                            // Refresh views if active
+                            if (currentView === 'dashboard') {
+                                renderDashboard();
+                            } else if (currentView === 'mobile') {
+                                renderMobileView();
+                            }
+                        }
                     }
                 }
             )
@@ -4594,15 +4615,37 @@ async function deleteItem(itemId) {
             user: currentUser?.nickname || 'Unknown'
         });
         
+        // Remove from local array first (optimistic update)
+        items = items.filter(i => i.id !== itemId);
+        renderBoard(); // Update UI immediately
+        
         // Delete from Supabase if configured
         if (checkSupabaseConfig()) {
-            await deleteItemFromSupabase(itemId);
+            const deleted = await deleteItemFromSupabase(itemId);
+            if (deleted) {
+                // Successfully deleted from Supabase - realtime will sync to other devices
+                // Also update localStorage to prevent stale data on reload
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                } catch (e) {
+                    console.error('Error updating localStorage after delete:', e);
+                }
+            } else {
+                // Failed to delete from Supabase - restore item
+                console.error('Failed to delete from Supabase, restoring item');
+                if (item) {
+                    items.push(item);
+                    renderBoard();
+                }
+            }
+        } else {
+            // No Supabase - just save to localStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
         }
-        
-        items = items.filter(i => i.id !== itemId);
-        // Save data (fire-and-forget, don't await to avoid blocking UI)
-        saveData().catch(err => console.error('Error saving data:', err));
-        renderBoard();
     }
 }
 
