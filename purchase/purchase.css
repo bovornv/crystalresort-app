@@ -3882,12 +3882,21 @@ textarea {
         gap: 0;
         width: 100%;
         padding: 0 !important;
-        overflow-y: auto !important; /* Enable vertical scrolling on mobile */
+        overflow-y: auto !important; /* CRITICAL: Enable vertical scrolling on mobile */
         overflow-x: hidden !important;
-        flex: 1 !important;
-        min-height: 0 !important;
-        max-height: 100% !important;
-        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        flex: 1 1 auto !important; /* Allow flex growth and shrinking */
+        min-height: 0 !important; /* CRITICAL: Required for flex scrolling */
+        max-height: none !important; /* Remove constraint to allow scrolling */
+        height: auto !important; /* Allow height to grow with content */
+        -webkit-overflow-scrolling: touch !important; /* Smooth scrolling on iOS */
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    
+    /* Ensure non-collapsed containers can scroll properly */
+    .items-container:not(.collapsed) {
+        overflow-y: auto !important;
+        max-height: calc(100vh - 250px) !important; /* Constrain to viewport for scrolling */
     }
     
     /* Status sections - clear separation */
