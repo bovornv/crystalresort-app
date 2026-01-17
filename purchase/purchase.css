@@ -2343,6 +2343,17 @@ header h1 {
     padding: 15px;
 }
 
+/* Mobile-specific: ensure items-container can scroll */
+@media (max-width: 640px) {
+    .items-container:not(.collapsed) {
+        padding: 0 !important; /* Remove padding on mobile for full-width scrolling */
+    }
+    
+    .column {
+        max-height: calc(100vh - 180px); /* Account for header and toggle bar */
+    }
+}
+
 .column-header h2 {
     font-size: 16px;
     font-weight: 600;
@@ -3542,7 +3553,8 @@ textarea {
     }
     
     .column {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
         min-width: 100% !important;
         max-width: 100% !important;
         width: 100% !important;
@@ -3554,6 +3566,8 @@ textarea {
         position: relative;
         margin-bottom: 24px;
         background-color: #ffffff;
+        max-height: calc(100vh - 200px); /* Allow column to scroll on mobile */
+        overflow: hidden; /* Prevent column itself from scrolling */
     }
     
     .column:last-child {
@@ -3851,6 +3865,12 @@ textarea {
         gap: 0;
         width: 100%;
         padding: 0 !important;
+        overflow-y: auto !important; /* Enable vertical scrolling on mobile */
+        overflow-x: hidden !important;
+        flex: 1 !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
     }
     
     /* Status sections - clear separation */
