@@ -2353,15 +2353,27 @@ header h1 {
 @media (max-width: 640px) {
     .items-container:not(.collapsed) {
         padding: 0 !important; /* Remove padding on mobile for full-width scrolling */
-        overflow-y: auto !important;
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        max-height: 100% !important;
+        overflow-y: auto !important; /* CRITICAL: Enable vertical scrolling */
+        overflow-x: hidden !important;
+        flex: 1 1 auto !important; /* Allow flex growth */
+        min-height: 0 !important; /* CRITICAL: Required for flex scrolling */
+        max-height: none !important; /* Remove max-height constraint */
+        height: auto !important; /* Allow height to grow */
+        -webkit-overflow-scrolling: touch !important; /* Smooth iOS scrolling */
+        display: flex !important;
+        flex-direction: column !important;
     }
     
     .column {
-        max-height: calc(100vh - 180px); /* Account for header and toggle bar */
-        min-height: 250px; /* Minimum height for mobile */
+        max-height: calc(100vh - 150px) !important; /* Account for header and toggle bar */
+        min-height: 200px !important; /* Minimum height for mobile */
+        height: auto !important; /* Allow height to adjust */
+    }
+    
+    /* Ensure column header doesn't shrink */
+    .column-header {
+        flex-shrink: 0 !important;
+        min-height: fit-content !important;
     }
 }
 
@@ -3569,8 +3581,10 @@ textarea {
         position: relative;
         margin-bottom: 24px;
         background-color: #ffffff;
-        max-height: calc(100vh - 200px); /* Allow column to scroll on mobile */
-        overflow: hidden; /* Prevent column itself from scrolling */
+        max-height: calc(100vh - 150px) !important; /* More space for scrolling on mobile */
+        min-height: 200px !important; /* Minimum height */
+        overflow: hidden !important; /* Prevent column itself from scrolling */
+        height: auto !important; /* Allow height to adjust */
     }
     
     .column:last-child {
