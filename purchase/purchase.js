@@ -6934,7 +6934,7 @@ function duplicateItem(itemId) {
     showNotification(t('itemDuplicatedSuccess'), 'success');
 }
 
-// Toggle column expand/collapse
+// Toggle column expand/collapse with accordion behavior (only one open at a time)
 function toggleColumn(columnId) {
     const container = document.getElementById(`${columnId}-items`);
     const toggleBtn = document.querySelector(`.column-toggle-btn[data-column="${columnId}"]`);
@@ -6943,37 +6943,32 @@ function toggleColumn(columnId) {
     
     const isCollapsed = container.classList.contains('collapsed');
     
+    // ACCORDION BEHAVIOR: Close all other sections when opening one
     if (isCollapsed) {
+        // Close all other sections first
+        const allColumns = ['need-to-buy', 'ordered', 'bought'];
+        allColumns.forEach(colId => {
+            if (colId !== columnId) {
+                const otherContainer = document.getElementById(`${colId}-items`);
+                const otherToggleBtn = document.querySelector(`.column-toggle-btn[data-column="${colId}"]`);
+                if (otherContainer && !otherContainer.classList.contains('collapsed')) {
+                    otherContainer.classList.add('collapsed');
+                    if (otherToggleBtn) {
+                        otherToggleBtn.textContent = '▶';
+                        otherToggleBtn.classList.add('collapsed');
+                    }
+                }
+            }
+        });
+        
+        // Now open the clicked section
         container.classList.remove('collapsed');
         if (toggleBtn) {
             toggleBtn.textContent = '▼';
             toggleBtn.classList.remove('collapsed');
         }
     } else {
-        container.classList.add('collapsed');
-        if (toggleBtn) {
-            toggleBtn.textContent = '▶';
-            toggleBtn.classList.add('collapsed');
-        }
-    }
-}
-
-// Toggle column expand/collapse
-function toggleColumn(columnId) {
-    const container = document.getElementById(`${columnId}-items`);
-    const toggleBtn = document.querySelector(`.column-toggle-btn[data-column="${columnId}"]`);
-    
-    if (!container) return;
-    
-    const isCollapsed = container.classList.contains('collapsed');
-    
-    if (isCollapsed) {
-        container.classList.remove('collapsed');
-        if (toggleBtn) {
-            toggleBtn.textContent = '▼';
-            toggleBtn.classList.remove('collapsed');
-        }
-    } else {
+        // Close the clicked section
         container.classList.add('collapsed');
         if (toggleBtn) {
             toggleBtn.textContent = '▶';

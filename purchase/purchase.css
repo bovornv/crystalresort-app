@@ -2200,28 +2200,42 @@ header h1 {
 
 .board-container {
     display: flex;
-    gap: 12px;
-    overflow-x: auto;
-    padding-top: 20px;
-    padding-bottom: 20px;
+    flex-direction: column; /* Stack sections vertically for accordion */
+    gap: 8px; /* Reduced spacing between sections */
+    overflow-x: visible;
+    overflow-y: auto;
+    padding-top: 12px; /* Reduced padding */
+    padding-bottom: 12px; /* Reduced padding */
     min-height: auto;
-    align-items: flex-start; /* Align columns at top */
+    align-items: stretch; /* Stretch columns to full width */
 }
 
 .column {
-    min-width: 420px;
-    max-width: 420px;
+    width: 100%; /* Full width for accordion layout */
+    min-width: 100%;
+    max-width: 100%;
     background-color: #ffffff;
     border-radius: 8px;
     padding: 0;
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 200px); /* Allow more space for scrolling */
-    min-height: 300px; /* Minimum height for visibility */
+    max-height: none; /* Remove height constraint - will be set when expanded */
+    min-height: auto; /* No minimum height when collapsed */
     border: 1px solid #e9e9e7;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    flex-shrink: 0; /* Prevent columns from shrinking */
+    flex-shrink: 0;
     overflow: hidden; /* Prevent column itself from scrolling */
+    margin-bottom: 0; /* Remove margin between sections */
+}
+
+/* When column is expanded, set max-height for scrolling */
+.column:has(.items-container:not(.collapsed)) {
+    max-height: calc(100vh - 250px); /* Constrain height when expanded */
+}
+
+/* When column is collapsed, minimize height */
+.column:has(.items-container.collapsed) {
+    max-height: fit-content; /* Only header height */
 }
 
 /* Column borders - clean and minimal like Room Status */
@@ -2315,7 +2329,7 @@ header h1 {
     overflow-x: hidden !important;
     flex: 1 1 auto !important; /* Allow flex growth and shrinking */
     min-height: 0 !important; /* Critical for flex scrolling */
-    max-height: 100% !important; /* Constrain to parent */
+    max-height: 100% !important; /* Constrain to parent when expanded */
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -2333,6 +2347,8 @@ header h1 {
 .items-container:not(.collapsed) {
     opacity: 1;
     padding: 15px;
+    max-height: calc(100vh - 300px) !important; /* Constrain height for scrolling */
+    overflow-y: auto !important; /* Enable scrolling when expanded */
 }
 
 /* Tablet: ensure proper scrolling */
@@ -3575,16 +3591,21 @@ textarea {
         width: 100% !important;
         padding: 0 !important;
         margin: 0 !important;
+        margin-bottom: 8px !important; /* Reduced margin for compact layout */
         border-radius: 0;
         flex-shrink: 0;
         box-sizing: border-box;
         position: relative;
-        margin-bottom: 24px;
         background-color: #ffffff;
-        max-height: calc(100vh - 150px) !important; /* More space for scrolling on mobile */
-        min-height: 200px !important; /* Minimum height */
+        max-height: none !important; /* No constraint when collapsed */
+        min-height: auto !important; /* No minimum height */
         overflow: hidden !important; /* Prevent column itself from scrolling */
         height: auto !important; /* Allow height to adjust */
+    }
+    
+    /* When expanded on mobile, constrain height for scrolling */
+    .column:has(.items-container:not(.collapsed)) {
+        max-height: calc(100vh - 200px) !important;
     }
     
     .column:last-child {
