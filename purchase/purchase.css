@@ -2353,8 +2353,8 @@ header h1 {
 
 .items-container:not(.collapsed) {
     opacity: 1;
-    padding: 15px;
-    max-height: calc(100vh - 300px) !important; /* Constrain height for scrolling */
+    padding: 12px; /* Reduced padding for compact layout */
+    max-height: calc(100vh - 280px) !important; /* Constrain height for scrolling */
     overflow-y: auto !important; /* Enable scrolling when expanded */
     flex: 1 1 auto !important; /* Allow flex growth */
     min-height: 0 !important; /* Critical for scrolling */
