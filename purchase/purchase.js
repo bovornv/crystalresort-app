@@ -598,18 +598,73 @@ async function deleteItemFromSupabase(itemId) {
     if (!checkSupabaseConfig()) return false;
     
     try {
-        const { error } = await supabaseClientInstance
+        const { data, error } = await supabaseClientInstance
             .from('purchase_items')
             .delete()
-            .eq('id', itemId);
+            .eq('id', itemId)
+            .select(); // Select deleted rows to verify deletion
         
         if (error) throw error;
-        return true;
+        
+        // Verify deletion succeeded
+        if (data && data.length > 0) {
+            console.log(`✅ Verified deletion in Supabase: ${itemId.substring(0, 8)}`);
+            return true;
+        } else {
+            // Item might not exist in Supabase (already deleted or never existed)
+            console.log(`ℹ️ Item ${itemId.substring(0, 8)} not found in Supabase (may already be deleted)`);
+            return true; // Still return true - item is effectively deleted
+        }
     } catch (e) {
-        console.error('Error deleting item from Supabase:', e);
+        console.error('❌ Error deleting item from Supabase:', e);
         return false;
     }
 }
+
+// Manual sync function - force reload from Supabase and update localStorage
+async function forceSyncFromSupabase() {
+    if (!checkSupabaseConfig()) {
+        showNotification('Supabase not configured. Cannot sync.', 'error');
+        return;
+    }
+    
+    console.log('🔄 Force syncing from Supabase...');
+    const beforeCount = items.length;
+    
+    try {
+        const supabaseItems = await loadItemsFromSupabase();
+        if (supabaseItems !== null) {
+            items = supabaseItems.map(item => migrateItemToV2(item));
+            const afterCount = items.length;
+            
+            // Update localStorage
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error updating localStorage:', e);
+            }
+            
+            // Re-render UI
+            renderBoard();
+            if (currentView === 'dashboard') {
+                renderDashboard();
+            } else if (currentView === 'mobile') {
+                renderMobileView();
+            }
+            
+            console.log(`✅ Sync complete: ${beforeCount} → ${afterCount} items`);
+            showNotification(`Synced: ${afterCount} items loaded`, 'success');
+        } else {
+            showNotification('Failed to sync from Supabase. Check your connection.', 'error');
+        }
+    } catch (e) {
+        console.error('Error syncing from Supabase:', e);
+        showNotification('Error syncing from Supabase', 'error');
+    }
+}
+
+// Expose sync function globally for manual use
+window.forceSyncFromSupabase = forceSyncFromSupabase;
 
 async function loadPurchaseRecordsFromSupabase() {
     if (!checkSupabaseConfig()) return null;
