@@ -21,7 +21,21 @@ CREATE POLICY "Allow all operations on announcements" ON announcements
   WITH CHECK (true);
 
 -- Enable Realtime for instant updates across devices
-ALTER PUBLICATION supabase_realtime ADD TABLE announcements;
+-- Use DO block to handle case where table is already in publication
+DO $$
+BEGIN
+    -- Check if announcements is already in the publication
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_publication_tables 
+        WHERE pubname = 'supabase_realtime' 
+        AND tablename = 'announcements'
+    ) THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE announcements;
+        RAISE NOTICE 'Added announcements to real-time publication';
+    ELSE
+        RAISE NOTICE 'announcements is already in real-time publication';
+    END IF;
+END $$;
 
 -- Insert initial empty row if it doesn't exist
 INSERT INTO announcements (id, text, updated_at)
