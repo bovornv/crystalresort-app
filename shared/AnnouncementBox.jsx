@@ -12,6 +12,8 @@ const AnnouncementBox = () => {
   // Use refs to store intervals/subscriptions for cleanup
   const pollIntervalRef = useRef(null);
   const realtimeSubscriptionRef = useRef(null);
+  const hasSubscribedRef = useRef(false);
+  const closedCountRef = useRef(0);
 
   // Only show announcement box on main page
   const currentPath = window.location.pathname;
@@ -117,6 +119,8 @@ const AnnouncementBox = () => {
             (payload) => {
               console.log('Announcement updated via realtime:', payload);
               realtimeWorking = true; // Mark realtime as working
+              hasSubscribedRef.current = true; // We got data, so subscription is working
+              closedCountRef.current = 0; // Reset closed count on successful update
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current); // Stop polling if realtime works
                 pollIntervalRef.current = null;
@@ -137,18 +141,46 @@ const AnnouncementBox = () => {
             if (status === 'SUBSCRIBED') {
               console.log('✅ Announcement realtime subscribed');
               realtimeWorking = true;
+              hasSubscribedRef.current = true;
+              closedCountRef.current = 0; // Reset closed count on successful subscription
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
               }
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-              console.warn('⚠️ Announcement realtime subscription error:', status, err);
+            } else if (status === 'TIMED_OUT') {
+              console.warn('⏱️ Announcement realtime TIMED_OUT - Supabase will auto-reconnect');
+              // Don't start polling immediately - let Supabase reconnect
               realtimeWorking = false;
-              // Start polling if realtime fails
-              if (!pollIntervalRef.current) {
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('❌ Announcement realtime CHANNEL_ERROR:', err);
+              realtimeWorking = false;
+              // Only start polling if we've never successfully subscribed
+              if (!hasSubscribedRef.current && !pollIntervalRef.current) {
+                console.warn('⚠️ Starting polling fallback due to channel error');
                 pollIntervalRef.current = setInterval(() => {
                   loadAnnouncement();
-                }, 2000); // Poll every 2 seconds as fallback
+                }, 2000);
+              }
+            } else if (status === 'CLOSED') {
+              // CLOSED can happen after SUBSCRIBED - it's not necessarily an error
+              // Supabase will auto-reconnect, so we only log if it's persistent
+              closedCountRef.current++;
+              if (closedCountRef.current === 1 && hasSubscribedRef.current) {
+                // First CLOSED after SUBSCRIBED - likely transient, Supabase will reconnect
+                console.log('ℹ️ Announcement realtime CLOSED (Supabase will auto-reconnect)');
+              } else if (closedCountRef.current > 3) {
+                // Multiple CLOSED events - might be a persistent issue
+                console.warn('⚠️ Announcement realtime CLOSED multiple times - starting polling fallback');
+                realtimeWorking = false;
+                if (!pollIntervalRef.current) {
+                  pollIntervalRef.current = setInterval(() => {
+                    loadAnnouncement();
+                  }, 2000);
+                }
+              } else if (!hasSubscribedRef.current) {
+                // CLOSED before ever subscribing - might be a real issue
+                console.warn('⚠️ Announcement realtime CLOSED before subscription');
+                realtimeWorking = false;
               }
             }
           });
@@ -158,12 +190,16 @@ const AnnouncementBox = () => {
       }
     }
 
-    // Fallback: Poll for updates every 2 seconds only if realtime doesn't work
-    if (!realtimeWorking && !pollIntervalRef.current) {
-      pollIntervalRef.current = setInterval(() => {
-        loadAnnouncement();
-      }, 2000);
-    }
+    // Fallback: Poll for updates every 2 seconds only if realtime never works
+    // Give realtime a chance to connect first (wait 3 seconds)
+    const fallbackTimeout = setTimeout(() => {
+      if (!realtimeWorking && !pollIntervalRef.current && !hasSubscribedRef.current) {
+        console.warn('⚠️ Realtime never connected - starting polling fallback');
+        pollIntervalRef.current = setInterval(() => {
+          loadAnnouncement();
+        }, 2000);
+      }
+    }, 3000);
 
     return () => {
       if (realtimeSubscriptionRef.current) {
@@ -173,6 +209,9 @@ const AnnouncementBox = () => {
       if (pollIntervalRef.current) {
         clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
+      }
+      if (fallbackTimeout) {
+        clearTimeout(fallbackTimeout);
       }
     };
   }, []);

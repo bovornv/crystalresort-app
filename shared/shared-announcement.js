@@ -360,6 +360,8 @@
       const client = initializeSupabaseClient();
       let pollInterval = null;
       let realtimeWorking = false;
+      let hasSubscribed = false; // Track if we've ever successfully subscribed
+      let closedCount = 0; // Track CLOSED events to detect persistent issues
 
       if (client) {
         try {
@@ -380,30 +382,60 @@
               }, 
               (payload) => {
                 console.log('Announcement updated via realtime:', payload);
-              realtimeWorking = true; // Mark realtime as working
-              if (pollInterval) {
-                clearInterval(pollInterval); // Stop polling if realtime works
-                pollInterval = null;
-              }
-              renderAnnouncementBox();
+                realtimeWorking = true; // Mark realtime as working
+                hasSubscribed = true; // We got data, so subscription is working
+                closedCount = 0; // Reset closed count on successful update
+                if (pollInterval) {
+                  clearInterval(pollInterval); // Stop polling if realtime works
+                  pollInterval = null;
+                }
+                renderAnnouncementBox();
               }
             )
             .subscribe((status, err) => {
               if (status === 'SUBSCRIBED') {
                 console.log('✅ Announcement realtime subscribed');
                 realtimeWorking = true;
+                hasSubscribed = true;
+                closedCount = 0; // Reset closed count on successful subscription
                 if (pollInterval) {
                   clearInterval(pollInterval);
                   pollInterval = null;
                 }
-              } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                console.warn('⚠️ Announcement realtime subscription error:', status, err);
+              } else if (status === 'TIMED_OUT') {
+                console.warn('⏱️ Announcement realtime TIMED_OUT - Supabase will auto-reconnect');
+                // Don't start polling immediately - let Supabase reconnect
                 realtimeWorking = false;
-                // Start polling if realtime fails
-                if (!pollInterval) {
+              } else if (status === 'CHANNEL_ERROR') {
+                console.error('❌ Announcement realtime CHANNEL_ERROR:', err);
+                realtimeWorking = false;
+                // Only start polling if we've never successfully subscribed
+                if (!hasSubscribed && !pollInterval) {
+                  console.warn('⚠️ Starting polling fallback due to channel error');
                   pollInterval = setInterval(() => {
                     renderAnnouncementBox();
-                  }, 2000); // Poll every 2 seconds as fallback
+                  }, 2000);
+                }
+              } else if (status === 'CLOSED') {
+                // CLOSED can happen after SUBSCRIBED - it's not necessarily an error
+                // Supabase will auto-reconnect, so we only log if it's persistent
+                closedCount++;
+                if (closedCount === 1 && hasSubscribed) {
+                  // First CLOSED after SUBSCRIBED - likely transient, Supabase will reconnect
+                  console.log('ℹ️ Announcement realtime CLOSED (Supabase will auto-reconnect)');
+                } else if (closedCount > 3) {
+                  // Multiple CLOSED events - might be a persistent issue
+                  console.warn('⚠️ Announcement realtime CLOSED multiple times - starting polling fallback');
+                  realtimeWorking = false;
+                  if (!pollInterval) {
+                    pollInterval = setInterval(() => {
+                      renderAnnouncementBox();
+                    }, 2000);
+                  }
+                } else if (!hasSubscribed) {
+                  // CLOSED before ever subscribing - might be a real issue
+                  console.warn('⚠️ Announcement realtime CLOSED before subscription');
+                  realtimeWorking = false;
                 }
               }
             });
@@ -413,12 +445,16 @@
         }
       }
 
-      // Fallback: Poll for updates every 2 seconds only if realtime doesn't work
-      if (!realtimeWorking && !pollInterval) {
-        pollInterval = setInterval(() => {
-          renderAnnouncementBox();
-        }, 2000);
-      }
+      // Fallback: Poll for updates every 2 seconds only if realtime never works
+      // Give realtime a chance to connect first (wait 3 seconds)
+      setTimeout(() => {
+        if (!realtimeWorking && !pollInterval && !hasSubscribed) {
+          console.warn('⚠️ Realtime never connected - starting polling fallback');
+          pollInterval = setInterval(() => {
+            renderAnnouncementBox();
+          }, 2000);
+        }
+      }, 3000);
       
       // Store references for cleanup
       window.announcementPollInterval = pollInterval;
