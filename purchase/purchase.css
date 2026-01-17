@@ -512,8 +512,8 @@ body {
 
 .app-container {
     min-height: 100vh;
-    padding: 8px 16px; /* Reduced vertical padding for compact layout */
-    padding-bottom: 8px; /* Minimal bottom padding */
+    padding: 4px 16px; /* Ultra-minimal vertical padding */
+    padding-bottom: 4px; /* Ultra-minimal bottom padding */
     background-color: #F6F8FA; /* Match Room Status background */
     display: flex;
     flex-direction: column;
@@ -588,8 +588,8 @@ header h1 {
 
 .bottom-actions-bar {
     background-color: #ffffff;
-    padding: 12px 20px; /* Reduced vertical padding */
-    margin-top: 8px; /* Minimal margin - visible on same screen */
+    padding: 10px 20px; /* Ultra-compact vertical padding */
+    margin-top: 4px; /* Ultra-minimal margin - visible on same screen */
     border-top: 1px solid #e9e9e7;
     display: flex !important;
     justify-content: center;
@@ -2204,11 +2204,11 @@ header h1 {
 .board-container {
     display: flex;
     flex-direction: column; /* Stack sections vertically for accordion */
-    gap: 4px; /* Minimal spacing between sections */
+    gap: 2px; /* Ultra-minimal spacing between sections */
     overflow-x: visible;
     overflow-y: auto;
-    padding-top: 8px; /* Minimal padding */
-    padding-bottom: 8px; /* Minimal padding */
+    padding-top: 4px; /* Ultra-minimal padding */
+    padding-bottom: 4px; /* Ultra-minimal padding */
     min-height: auto;
     align-items: stretch; /* Stretch columns to full width */
 }
@@ -2282,14 +2282,14 @@ header h1 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0;
-    padding: 12px 16px; /* Reduced padding for compact header */
+    padding: 10px 12px; /* Ultra-compact header padding */
     background-color: #fafafa; /* Match Room Status bg-gray-50 */
     border-radius: 8px 8px 0 0;
     cursor: pointer;
     user-select: none;
     transition: background-color 0.15s;
     flex-wrap: wrap;
-    gap: 8px; /* Reduced gap */
+    gap: 6px; /* Minimal gap */
     border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0; /* Prevent header from shrinking */
     min-height: fit-content; /* Ensure header doesn't shrink */
@@ -3581,9 +3581,9 @@ textarea {
     .board-container {
         display: flex !important;
         flex-direction: column !important;
-        padding: 8px 0 0 0 !important; /* Minimal padding for compact layout */
+        padding: 4px 0 0 0 !important; /* Ultra-minimal padding for compact layout */
         margin: 0 !important;
-        gap: 4px !important; /* Minimal gap between sections */
+        gap: 2px !important; /* Ultra-minimal gap between sections */
         overflow-x: visible !important;
         overflow-y: auto !important;
         width: 100% !important;
@@ -3619,7 +3619,17 @@ textarea {
     
     /* Compact column header on mobile */
     .column-header {
-        padding: 10px 12px !important; /* Reduced padding for compact header */
+        padding: 8px 12px !important; /* Ultra-compact header padding */
+    }
+    
+    /* Ensure bottom buttons are visible on mobile */
+    .app-container {
+        padding-bottom: 4px !important;
+    }
+    
+    .bottom-actions-bar {
+        margin-top: 2px !important; /* Ultra-minimal margin */
+        padding: 8px 16px !important; /* Ultra-compact padding */
     }
     
     .column:last-child {
