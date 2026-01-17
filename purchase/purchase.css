@@ -511,12 +511,14 @@ body {
 }
 
 .app-container {
-    min-height: 100vh;
-    padding: 4px 16px; /* Ultra-minimal vertical padding */
-    padding-bottom: 4px; /* Ultra-minimal bottom padding */
+    min-height: calc(100vh - 70px); /* Account for top bar */
+    max-height: calc(100vh - 70px); /* Constrain to viewport minus top bar */
+    padding: 2px 16px; /* Ultra-minimal vertical padding */
+    padding-bottom: 2px; /* Ultra-minimal bottom padding */
     background-color: #F6F8FA; /* Match Room Status background */
     display: flex;
     flex-direction: column;
+    overflow-y: auto; /* Allow scrolling if needed */
 }
 
 header {
@@ -2238,7 +2240,9 @@ header h1 {
 
 /* When column is collapsed, minimize height */
 .column:has(.items-container.collapsed) {
-    max-height: fit-content; /* Only header height */
+    max-height: fit-content !important; /* Only header height */
+    min-height: auto !important; /* No minimum height when collapsed */
+    height: auto !important; /* Allow natural height */
 }
 
 /* Column borders - clean and minimal like Room Status */
@@ -2310,13 +2314,18 @@ header h1 {
 .column-toggle-btn {
     background: none;
     border: none;
-    font-size: 14px;
+    font-size: 12px; /* Smaller toggle button */
     color: #555;
     cursor: pointer;
-    padding: 4px 8px;
+    padding: 2px 4px; /* Reduced padding */
     transition: transform 0.2s, color 0.2s;
     flex-shrink: 0;
-    min-width: 24px;
+    min-width: 20px; /* Smaller button */
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .column-toggle-btn:hover {
@@ -2345,11 +2354,13 @@ header h1 {
 }
 
 .items-container.collapsed {
-    max-height: 0;
+    max-height: 0 !important;
+    height: 0 !important; /* Explicitly set height to 0 */
     opacity: 0;
     padding: 0 !important;
     margin: 0 !important;
-    overflow: hidden;
+    overflow: hidden !important;
+    display: none; /* Completely hide collapsed content */
 }
 
 .items-container:not(.collapsed) {
@@ -2405,9 +2416,11 @@ header h1 {
 }
 
 .column-header h2 {
-    font-size: 16px;
+    font-size: 14px; /* Reduced font size for compact header */
     font-weight: 600;
     color: #374151; /* Match Room Status text-gray-700 */
+    margin: 0; /* Remove any default margins */
+    line-height: 1.2; /* Tighter line height */
     display: flex;
     align-items: center;
     gap: 8px;
