@@ -2619,12 +2619,20 @@ async function recordPurchase(item, status) {
 // Load data from Supabase or localStorage (async)
 async function loadData() {
     if (checkSupabaseConfig()) {
-        // Try loading from Supabase first
+        // Try loading from Supabase first (source of truth)
         const supabaseItems = await loadItemsFromSupabase();
         if (supabaseItems !== null) {
+            // Supabase is source of truth - use it even if localStorage has different data
             items = supabaseItems.map(item => migrateItemToV2(item));
+            
+            // Update localStorage to match Supabase (prevent stale data on reload)
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+            } catch (e) {
+                console.error('Error syncing localStorage with Supabase:', e);
+            }
         } else {
-            // Fallback to localStorage
+            // Supabase unavailable - fallback to localStorage
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 try {
