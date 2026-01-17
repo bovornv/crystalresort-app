@@ -1,6 +1,46 @@
 // Crystal Resort Procurement Board
 // Crystal Resort Internal Tools
 
+// Global error handler - filter out browser extension errors
+// This prevents third-party extensions (like Solana wallet) from cluttering the console
+window.addEventListener('error', function(event) {
+    // Filter out errors from browser extensions
+    if (event.filename && (
+        event.filename.includes('extension://') ||
+        event.filename.includes('chrome-extension://') ||
+        event.filename.includes('moz-extension://') ||
+        event.filename.includes('solanaActionsContentScript') ||
+        event.filename.includes('contentScript') ||
+        event.message && event.message.includes('extension')
+    )) {
+        // Silently ignore extension errors - they don't affect our app
+        event.preventDefault();
+        return false;
+    }
+    // Allow other errors to be logged normally
+});
+
+// Global unhandled promise rejection handler - filter out extension errors
+window.addEventListener('unhandledrejection', function(event) {
+    // Filter out promise rejections from browser extensions
+    const errorString = event.reason ? String(event.reason) : '';
+    const stackString = event.reason && event.reason.stack ? String(event.reason.stack) : '';
+    
+    if (errorString.includes('solanaActionsContentScript') ||
+        errorString.includes('extension://') ||
+        errorString.includes('chrome-extension://') ||
+        errorString.includes('moz-extension://') ||
+        stackString.includes('solanaActionsContentScript') ||
+        stackString.includes('extension://') ||
+        stackString.includes('chrome-extension://') ||
+        stackString.includes('moz-extension://')) {
+        // Silently ignore extension promise rejections
+        event.preventDefault();
+        return false;
+    }
+    // Allow other promise rejections to be logged normally
+});
+
 // Supabase Configuration
 // TODO: Replace with your Supabase project URL and anon key
 // Get these from your Supabase project settings: https://app.supabase.com/project/_/settings/api
