@@ -1378,18 +1378,7 @@ header h1 {
     contain: layout style paint;
 }
 
-.items-container {
-    contain: layout;
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-height: 0; /* Allow flex shrinking */
-    max-height: 100%; /* Constrain to parent height */
-}
+/* Note: Main .items-container rule is defined later with scrolling support */
 
 /* Receiving Checklist Styles */
 .checklist-content {
