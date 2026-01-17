@@ -609,7 +609,7 @@ async function deleteItemFromSupabase(itemId) {
         // Verify deletion succeeded
         if (data && data.length > 0) {
             console.log(`✅ Verified deletion in Supabase: ${itemId.substring(0, 8)}`);
-            return true;
+        return true;
         } else {
             // Item might not exist in Supabase (already deleted or never existed)
             console.log(`ℹ️ Item ${itemId.substring(0, 8)} not found in Supabase (may already be deleted)`);
@@ -877,6 +877,12 @@ class RealtimeManager {
         this._maxRetriesLogged = false;
         this._rateLimitLogged = false;
         this._lastRateLimitLog = 0;
+        
+        // Prevent recursive calls and multiple retries
+        this._isStopping = false;
+        this._retryScheduled = false;
+        this._retryTimeout = null;
+        this._stopTime = 0; // Timestamp of last stop() call
     }
     
     /**
@@ -901,10 +907,17 @@ class RealtimeManager {
         }
         
         // Prevent concurrent start attempts
-        if (this.isReconnecting) {
-            console.log('⏳ RealtimeManager: Already reconnecting, skipping start');
+        if (this.isReconnecting || this._isStopping) {
+            console.log('⏳ RealtimeManager: Already reconnecting or stopping, skipping start');
             return false;
         }
+        
+        // Clear any pending retry
+        if (this._retryTimeout) {
+            clearTimeout(this._retryTimeout);
+            this._retryTimeout = null;
+        }
+        this._retryScheduled = false;
         
         // Clean up any existing channels before starting new ones
         this.stop();
@@ -942,9 +955,25 @@ class RealtimeManager {
      * CRITICAL: Fully unsubscribes and removes all channels
      */
     stop() {
+        // Prevent recursive calls
+        if (this._isStopping) {
+            return;
+        }
+        
         if (!this.isStarted && !this._hasAnyChannels()) {
             return; // Already stopped
         }
+        
+        // Set flag to prevent recursive calls from status handlers
+        this._isStopping = true;
+        this._stopTime = Date.now(); // Record stop time
+        
+        // Clear any pending retry
+        if (this._retryTimeout) {
+            clearTimeout(this._retryTimeout);
+            this._retryTimeout = null;
+        }
+        this._retryScheduled = false;
         
         const client = getSupabaseClient();
         
@@ -978,6 +1007,11 @@ class RealtimeManager {
         this._maxRetriesLogged = false;
         this._rateLimitLogged = false;
         this._lastRateLimitLog = 0;
+        
+        // Reset stopping flag after a short delay to allow status callbacks to complete
+        setTimeout(() => {
+            this._isStopping = false;
+        }, 100);
         
         console.log('🛑 RealtimeManager stopped');
     }
@@ -1015,6 +1049,20 @@ class RealtimeManager {
      * @param {Error} err - Error object if status is error
      */
     _handleChannelStatus(channelName, status, err) {
+        // Ignore status events during stop to prevent recursive loops
+        if (this._isStopping) {
+            return;
+        }
+        
+        // Ignore CLOSED events that happen within 500ms of stop() call
+        // These are cleanup events, not real errors
+        if ((status === 'CLOSED' || status === 'CHANNEL_ERROR') && this._stopTime > 0) {
+            const timeSinceStop = Date.now() - this._stopTime;
+            if (timeSinceStop < 500) {
+                return; // Ignore cleanup CLOSED events
+            }
+        }
+        
         const channelLabel = `[${channelName}]`;
         
         if (status === 'SUBSCRIBED') {
@@ -1024,6 +1072,12 @@ class RealtimeManager {
             this.isReconnecting = false;
             isReconnecting = false;
             this.retryCount = 0; // Reset retry count on success
+            this._retryScheduled = false; // Clear retry flag on success
+            this._stopTime = 0; // Reset stop time on success
+            if (this._retryTimeout) {
+                clearTimeout(this._retryTimeout);
+                this._retryTimeout = null;
+            }
             console.log(`✅ ${channelLabel} SUBSCRIBED (websocket connected)`);
         } else if (status === 'TIMED_OUT') {
             // Timeout - log but don't retry immediately (may recover on its own)
@@ -1046,6 +1100,13 @@ class RealtimeManager {
                 }
             }
             
+            // CRITICAL: Only schedule ONE retry even if multiple channels error
+            // This prevents multiple simultaneous retries that cause loops
+            if (this._retryScheduled) {
+                // Retry already scheduled by another channel - skip
+                return;
+            }
+            
             // CRITICAL: Stop all channels before retrying (prevents duplicate channels)
             this.stop();
             
@@ -1056,11 +1117,19 @@ class RealtimeManager {
             if (timeSinceLastRetry >= this.maxRetryDelay && this.retryCount < 1) {
                 this.retryCount++;
                 this.lastRetryTime = now;
+                this._retryScheduled = true; // Mark retry as scheduled
                 console.log(`🔄 ${channelLabel} Retrying start() (attempt ${this.retryCount}/1)...`);
                 
+                // Clear any existing retry timeout
+                if (this._retryTimeout) {
+                    clearTimeout(this._retryTimeout);
+                }
+                
                 // Retry with short delay (2 seconds)
-                setTimeout(() => {
-                    if (checkSupabaseConfig() && !this.isStarted) {
+                this._retryTimeout = setTimeout(() => {
+                    this._retryScheduled = false; // Clear flag before retry
+                    this._retryTimeout = null;
+                    if (checkSupabaseConfig() && !this.isStarted && !this._isStopping) {
                         this.start();
                     }
                 }, 2000);
@@ -1255,7 +1324,7 @@ class RealtimeManager {
                                 }
                                 
                                 // CRITICAL: Re-render UI immediately to reflect state changes
-                                renderBoard();
+                    renderBoard();
                                 updatePresenceIndicator();
                                 
                                 // Refresh views if active
@@ -4774,7 +4843,7 @@ async function deleteItem(itemId) {
                 console.error('❌ Failed to delete from Supabase, restoring item');
                 if (item) {
                     items.push(item);
-                    renderBoard();
+        renderBoard();
                     showNotification('Failed to delete item. Please try again.', 'error');
                 }
             }
