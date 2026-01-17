@@ -2320,7 +2320,11 @@ header h1 {
 }
 
 .column-toggle-btn.collapsed {
-    transform: rotate(-90deg);
+    transform: rotate(0deg); /* Show ▶ when collapsed */
+}
+
+.column-toggle-btn:not(.collapsed) {
+    transform: rotate(0deg); /* Show ▼ when expanded */
 }
 
 .items-container {
