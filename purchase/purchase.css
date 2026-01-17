@@ -2227,7 +2227,8 @@ header h1 {
     padding: 0;
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 300px); /* Fit all three sections on screen */
+    max-height: calc(100vh - 200px); /* Allow more space for scrolling */
+    min-height: 300px; /* Minimum height for visibility */
     border: 1px solid #e9e9e7;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     flex-shrink: 0; /* Prevent columns from shrinking */
@@ -2321,13 +2322,15 @@ header h1 {
 
 .items-container {
     transition: max-height 0.3s ease-out, opacity 0.2s ease-out, padding 0.3s ease-out;
-    overflow-y: auto;
-    overflow-x: hidden;
-    flex: 1;
-    min-height: 0;
+    overflow-y: auto !important; /* Force scrolling to work */
+    overflow-x: hidden !important;
+    flex: 1 1 auto !important; /* Allow flex growth and shrinking */
+    min-height: 0 !important; /* Critical for flex scrolling */
+    max-height: 100% !important; /* Constrain to parent */
     display: flex;
     flex-direction: column;
     gap: 12px;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .items-container.collapsed {
@@ -2343,14 +2346,33 @@ header h1 {
     padding: 15px;
 }
 
+/* Tablet: ensure proper scrolling */
+@media (min-width: 641px) and (max-width: 1024px) {
+    .column {
+        max-height: calc(100vh - 220px);
+        min-height: 400px;
+    }
+    
+    .items-container:not(.collapsed) {
+        overflow-y: auto !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+    }
+}
+
 /* Mobile-specific: ensure items-container can scroll */
 @media (max-width: 640px) {
     .items-container:not(.collapsed) {
         padding: 0 !important; /* Remove padding on mobile for full-width scrolling */
+        overflow-y: auto !important;
+        flex: 1 1 auto !important;
+        min-height: 0 !important;
+        max-height: 100% !important;
     }
     
     .column {
         max-height: calc(100vh - 180px); /* Account for header and toggle bar */
+        min-height: 250px; /* Minimum height for mobile */
     }
 }
 
@@ -2392,16 +2414,8 @@ header h1 {
     transform: scale(0.98);
 }
 
-.items-container {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    min-height: 0;
-    max-height: 100%;
-}
+/* This duplicate .items-container rule is redundant - removing to avoid conflicts */
+/* Scrolling is handled by the main .items-container rule above */
 
 .item-card {
     background-color: white;
