@@ -3574,13 +3574,13 @@ textarea {
         font-size: 19px !important;
     }
     
-    /* Compact board container - full width, no padding */
+    /* Compact board container - full width, accordion layout */
     .board-container {
         display: flex !important;
         flex-direction: column !important;
-        padding: 25px 0 0 0 !important; /* Increased top padding to prevent header overlap */
+        padding: 12px 0 0 0 !important; /* Reduced padding for compact layout */
         margin: 0 !important;
-        gap: 0;
+        gap: 8px !important; /* Reduced gap between sections */
         overflow-x: visible !important;
         overflow-y: auto !important;
         width: 100% !important;
