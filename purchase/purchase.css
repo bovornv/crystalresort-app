@@ -3334,8 +3334,8 @@ textarea {
     }
     
     .bottom-actions-bar {
-        padding: 16px;
-        margin-top: 24px;
+        padding: 10px 16px; /* Reduced vertical padding */
+        margin-top: 4px; /* Minimal margin - visible on same screen */
     }
 
     .supplier-filters {
