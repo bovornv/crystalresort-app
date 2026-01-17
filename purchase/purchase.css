@@ -2282,17 +2282,18 @@ header h1 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0;
-    padding: 10px 12px; /* Ultra-compact header padding */
+    padding: 6px 10px; /* Ultra-minimal header padding */
     background-color: #fafafa; /* Match Room Status bg-gray-50 */
     border-radius: 8px 8px 0 0;
     cursor: pointer;
     user-select: none;
     transition: background-color 0.15s;
     flex-wrap: wrap;
-    gap: 6px; /* Minimal gap */
+    gap: 4px; /* Ultra-minimal gap */
     border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0; /* Prevent header from shrinking */
-    min-height: fit-content; /* Ensure header doesn't shrink */
+    min-height: auto; /* Allow header to be as small as possible */
+    max-height: fit-content; /* No max height constraint */
 }
 
 .column-header:hover {
@@ -2302,7 +2303,7 @@ header h1 {
 .column-header-left {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 6px; /* Reduced gap */
     flex: 1;
 }
 
@@ -2353,6 +2354,7 @@ header h1 {
 
 .items-container:not(.collapsed) {
     opacity: 1;
+    display: flex; /* Show when expanded */
     padding: 12px; /* Reduced padding for compact layout */
     max-height: calc(100vh - 280px) !important; /* Constrain height for scrolling */
     overflow-y: auto !important; /* Enable scrolling when expanded */
@@ -3619,17 +3621,30 @@ textarea {
     
     /* Compact column header on mobile */
     .column-header {
-        padding: 8px 12px !important; /* Ultra-compact header padding */
+        padding: 5px 10px !important; /* Ultra-minimal header padding */
+    }
+    
+    .column-header h2 {
+        font-size: 13px !important; /* Smaller font on mobile */
+    }
+    
+    .column-toggle-btn {
+        width: 18px !important;
+        height: 18px !important;
+        font-size: 11px !important;
     }
     
     /* Ensure bottom buttons are visible on mobile */
     .app-container {
-        padding-bottom: 4px !important;
+        padding: 2px 12px !important; /* Ultra-minimal padding */
+        padding-bottom: 2px !important;
+        min-height: calc(100vh - 70px) !important;
+        max-height: calc(100vh - 70px) !important;
     }
     
     .bottom-actions-bar {
         margin-top: 2px !important; /* Ultra-minimal margin */
-        padding: 8px 16px !important; /* Ultra-compact padding */
+        padding: 6px 12px !important; /* Ultra-compact padding */
     }
     
     .column:last-child {
