@@ -1182,28 +1182,36 @@ class RealtimeManager {
                         const deletedId = payload.old?.id;
                         if (deletedId) {
                             const beforeCount = items.length;
-                            items = items.filter(i => i.id !== deletedId);
-                            const afterCount = items.length;
+                            const itemExists = items.some(i => i.id === deletedId);
                             
-                            // Log deletion for debugging
-                            console.log(`🗑️ RT DELETE: ${deletedId.substring(0, 8)} (${beforeCount} → ${afterCount} items)`);
-                            
-                            // CRITICAL: Update localStorage to prevent stale data on reload
-                            try {
-                                localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-                            } catch (e) {
-                                console.error('Error updating localStorage after realtime delete:', e);
-                            }
-                            
-                            // CRITICAL: Re-render UI to reflect state changes
-                            renderBoard();
-                            updatePresenceIndicator();
-                            
-                            // Refresh views if active
-                            if (currentView === 'dashboard') {
-                                renderDashboard();
-                            } else if (currentView === 'mobile') {
-                                renderMobileView();
+                            if (itemExists) {
+                                items = items.filter(i => i.id !== deletedId);
+                                const afterCount = items.length;
+                                
+                                // Log deletion for debugging
+                                console.log(`🗑️ RT DELETE: ${deletedId.substring(0, 8)} (${beforeCount} → ${afterCount} items)`);
+                                
+                                // CRITICAL: Update localStorage immediately to prevent stale data
+                                try {
+                                    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                                    console.log(`💾 localStorage updated after DELETE: ${items.length} items`);
+                                } catch (e) {
+                                    console.error('Error updating localStorage after realtime delete:', e);
+                                }
+                                
+                                // CRITICAL: Re-render UI immediately to reflect state changes
+                                renderBoard();
+                                updatePresenceIndicator();
+                                
+                                // Refresh views if active
+                                if (currentView === 'dashboard') {
+                                    renderDashboard();
+                                } else if (currentView === 'mobile') {
+                                    renderMobileView();
+                                }
+                            } else {
+                                // Item already deleted locally - log for debugging
+                                console.log(`ℹ️ RT DELETE: ${deletedId.substring(0, 8)} already removed locally`);
                             }
                         }
                     }
@@ -2663,20 +2671,40 @@ async function loadData() {
         const supabaseItems = await loadItemsFromSupabase();
         if (supabaseItems !== null) {
             // Supabase is source of truth - use it even if localStorage has different data
+            const supabaseCount = supabaseItems.length;
+            const localStored = localStorage.getItem(STORAGE_KEY);
+            let localCount = 0;
+            if (localStored) {
+                try {
+                    const localItems = JSON.parse(localStored);
+                    localCount = localItems.length;
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            }
+            
             items = supabaseItems.map(item => migrateItemToV2(item));
             
-            // Update localStorage to match Supabase (prevent stale data on reload)
+            // Log if there's a mismatch (helps debug sync issues)
+            if (localCount !== supabaseCount) {
+                console.log(`🔄 Syncing data: localStorage had ${localCount} items, Supabase has ${supabaseCount} items`);
+            }
+            
+            // CRITICAL: Update localStorage to match Supabase (prevent stale data on reload)
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                console.log(`💾 localStorage synced with Supabase: ${items.length} items`);
             } catch (e) {
                 console.error('Error syncing localStorage with Supabase:', e);
             }
         } else {
             // Supabase unavailable - fallback to localStorage
+            console.warn('⚠️ Supabase unavailable, using localStorage fallback');
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 try {
                     items = JSON.parse(stored).map(item => migrateItemToV2(item));
+                    console.log(`📦 Loaded ${items.length} items from localStorage`);
                 } catch (e) {
                     console.error('Error loading data:', e);
                     items = [];
@@ -4656,7 +4684,7 @@ async function deleteItem(itemId) {
     
     if (confirm(t('confirmDeleteItem'))) {
         const item = items.find(i => i.id === itemId);
-        console.log('🗑️ Item deleted:', {
+        console.log('🗑️ Deleting item:', {
             id: itemId,
             name: item?.name || 'Unknown',
             status: item?.status || 'Unknown',
@@ -4664,32 +4692,42 @@ async function deleteItem(itemId) {
         });
         
         // Remove from local array first (optimistic update)
+        const beforeCount = items.length;
         items = items.filter(i => i.id !== itemId);
-        renderBoard(); // Update UI immediately
+        const afterCount = items.length;
+        console.log(`🗑️ Local delete: ${beforeCount} → ${afterCount} items`);
+        
+        // Update UI immediately
+        renderBoard();
         
         // Delete from Supabase if configured
         if (checkSupabaseConfig()) {
             const deleted = await deleteItemFromSupabase(itemId);
             if (deleted) {
                 // Successfully deleted from Supabase - realtime will sync to other devices
-                // Also update localStorage to prevent stale data on reload
+                console.log(`✅ Deleted from Supabase: ${itemId.substring(0, 8)}`);
+                
+                // CRITICAL: Update localStorage immediately to prevent stale data
                 try {
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                    console.log(`💾 localStorage updated: ${items.length} items`);
                 } catch (e) {
                     console.error('Error updating localStorage after delete:', e);
                 }
             } else {
                 // Failed to delete from Supabase - restore item
-                console.error('Failed to delete from Supabase, restoring item');
+                console.error('❌ Failed to delete from Supabase, restoring item');
                 if (item) {
                     items.push(item);
                     renderBoard();
+                    showNotification('Failed to delete item. Please try again.', 'error');
                 }
             }
         } else {
             // No Supabase - just save to localStorage
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+                console.log(`💾 localStorage updated (no Supabase): ${items.length} items`);
             } catch (e) {
                 console.error('Error saving to localStorage:', e);
             }
