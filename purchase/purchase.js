@@ -1,8 +1,8 @@
 // Crystal Resort Procurement Board
 // Crystal Resort Internal Tools
 
-// Global error handler - filter out browser extension errors
-// This prevents third-party extensions (like Solana wallet) from cluttering the console
+// Global error handler - filter out browser extension errors and known Supabase WebSocket errors
+// This prevents third-party extensions (like Solana wallet) and transient Supabase reconnection errors from cluttering the console
 window.addEventListener('error', function(event) {
     // Filter out errors from browser extensions
     if (event.filename && (
@@ -17,10 +17,23 @@ window.addEventListener('error', function(event) {
         event.preventDefault();
         return false;
     }
+    
+    // Filter out known Supabase WebSocket connection errors (transient reconnection attempts)
+    // These are handled automatically by Supabase and don't need user attention
+    if (event.message && (
+        event.message.includes('WebSocket connection') && event.message.includes('failed') ||
+        event.message.includes('realtime/v1/websocket') ||
+        (event.filename && event.filename.includes('supabase.js'))
+    )) {
+        // Silently ignore Supabase WebSocket reconnection errors - they're transient and handled automatically
+        event.preventDefault();
+        return false;
+    }
+    
     // Allow other errors to be logged normally
 });
 
-// Global unhandled promise rejection handler - filter out extension errors
+// Global unhandled promise rejection handler - filter out extension errors and Supabase WebSocket errors
 window.addEventListener('unhandledrejection', function(event) {
     // Filter out promise rejections from browser extensions
     const errorString = event.reason ? String(event.reason) : '';
@@ -38,6 +51,17 @@ window.addEventListener('unhandledrejection', function(event) {
         event.preventDefault();
         return false;
     }
+    
+    // Filter out Supabase WebSocket connection errors (transient reconnection attempts)
+    if (errorString.includes('WebSocket connection') && errorString.includes('failed') ||
+        errorString.includes('realtime/v1/websocket') ||
+        stackString.includes('realtime/v1/websocket') ||
+        stackString.includes('supabase.js')) {
+        // Silently ignore Supabase WebSocket reconnection errors - they're transient and handled automatically
+        event.preventDefault();
+        return false;
+    }
+    
     // Allow other promise rejections to be logged normally
 });
 
@@ -1087,12 +1111,13 @@ class RealtimeManager {
             // Map channel name to error tracking key
             const channelKey = channelName === 'purchase_items' ? 'items' : 'history';
             
-            // Log error only once per channel to prevent spam
+            // Log info only once per channel (using console.log instead of console.warn to avoid red warnings)
+            // These are expected transient states, not actual errors
             if (!this._errorLogged[channelKey]) {
-                console.warn(`⚠️ ${channelLabel} ${status} - treating as transient, Supabase will auto-reconnect`, err || '');
+                console.log(`ℹ️ ${channelLabel} ${status} - transient state, Supabase will auto-reconnect`, err || '');
                 this._errorLogged[channelKey] = true;
                 
-                // Log helpful error details (only once)
+                // Log helpful error details only for actual configuration issues (only once)
                 if (err) {
                     if (err.message && err.message.includes('permission denied')) {
                         console.warn(`💡 ${channelLabel} RLS Policy Issue: Real-time needs SELECT permission. Run FIX_REALTIME_SYNC.sql in Supabase SQL Editor.`);
