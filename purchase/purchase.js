@@ -1088,12 +1088,10 @@ class RealtimeManager {
         const channelLabel = `[${channelName}]`;
         
         if (status === 'SUBSCRIBED') {
-            // Success - sync global flags and reset error tracking
+            // Success - sync global flags
             realtimeSubscribed = true;
             this.isStarted = true;
-            // Reset error logged flag on successful subscription
-            const channelKey = channelName === 'purchase_items' ? 'items' : 'history';
-            this._errorLogged[channelKey] = false;
+            // Note: Do NOT reset _errorLogged flag - CHANNEL_ERROR should only log once per channel per session
             console.log(`✅ ${channelLabel} SUBSCRIBED (websocket connected)`);
             return; // Early return - no further processing needed
         }
@@ -1111,8 +1109,9 @@ class RealtimeManager {
             // Map channel name to error tracking key
             const channelKey = channelName === 'purchase_items' ? 'items' : 'history';
             
-            // Log info only once per channel (using console.log instead of console.warn to avoid red warnings)
+            // Log CHANNEL_ERROR only once per channel per session (completely silent after first occurrence)
             // These are expected transient states, not actual errors
+            // Flag persists for entire session - never reset, even on successful reconnects
             if (!this._errorLogged[channelKey]) {
                 console.log(`ℹ️ ${channelLabel} ${status} - transient state, Supabase will auto-reconnect`, err || '');
                 this._errorLogged[channelKey] = true;
@@ -1127,6 +1126,7 @@ class RealtimeManager {
                     }
                 }
             }
+            // Subsequent CHANNEL_ERROR events for this channel are completely silent (no logging)
             
             // CRITICAL: Early return - do NOT call stop(), start(), or removeChannel()
             // Do NOT attempt manual reconnect - Supabase handles this automatically
