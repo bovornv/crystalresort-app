@@ -14,6 +14,9 @@ const AnnouncementBox = () => {
   const realtimeSubscriptionRef = useRef(null);
   const hasSubscribedRef = useRef(false);
   const closedCountRef = useRef(0);
+  const announcementSubscribedRef = useRef(false); // Guard against double subscription
+  const announcementErrorTimeRef = useRef(null); // Track when CHANNEL_ERROR first occurred
+  const announcementStartTimeRef = useRef(null); // Track when subscription started
 
   // Only show announcement box on main page
   const currentPath = window.location.pathname;
@@ -100,6 +103,22 @@ const AnnouncementBox = () => {
     let realtimeWorking = false;
 
     if (isSupabaseConfigured) {
+      // Guard against double subscription
+      if (announcementSubscribedRef.current) {
+        console.log("ℹ️ Realtime subscription already active — skipping");
+        return;
+      }
+
+      // Runtime check: Verify Supabase client is available
+      if (!supabase) {
+        console.warn("⚠️ Supabase client not available — skipping realtime subscription");
+        return;
+      }
+
+      // Track subscription start time
+      announcementStartTimeRef.current = Date.now();
+      announcementSubscribedRef.current = true;
+
       try {
         // Use unique channel name to avoid conflicts
         const channelName = `announcements-changes-${Date.now()}`;
@@ -121,6 +140,7 @@ const AnnouncementBox = () => {
               realtimeWorking = true; // Mark realtime as working
               hasSubscribedRef.current = true; // We got data, so subscription is working
               closedCountRef.current = 0; // Reset closed count on successful update
+              announcementErrorTimeRef.current = null; // Reset error tracking
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current); // Stop polling if realtime works
                 pollIntervalRef.current = null;
@@ -143,31 +163,46 @@ const AnnouncementBox = () => {
               realtimeWorking = true;
               hasSubscribedRef.current = true;
               closedCountRef.current = 0; // Reset closed count on successful subscription
+              announcementErrorTimeRef.current = null; // Reset error tracking
               if (pollIntervalRef.current) {
                 clearInterval(pollIntervalRef.current);
                 pollIntervalRef.current = null;
               }
             } else if (status === 'TIMED_OUT') {
-              console.warn('⏱️ Announcement realtime TIMED_OUT - Supabase will auto-reconnect');
+              console.log('ℹ️ Supabase auto-reconnected — no action needed');
               // Don't start polling immediately - let Supabase reconnect
               realtimeWorking = false;
             } else if (status === 'CHANNEL_ERROR') {
-              console.error('❌ Announcement realtime CHANNEL_ERROR:', err);
-              realtimeWorking = false;
-              // Only start polling if we've never successfully subscribed
-              if (!hasSubscribedRef.current && !pollIntervalRef.current) {
-                console.warn('⚠️ Starting polling fallback due to channel error');
-                pollIntervalRef.current = setInterval(() => {
-                  loadAnnouncement();
-                }, 2000);
+              // Track when error first occurred
+              if (!announcementErrorTimeRef.current) {
+                announcementErrorTimeRef.current = Date.now();
+              }
+              
+              const errorDuration = Date.now() - announcementErrorTimeRef.current;
+              const totalDuration = Date.now() - announcementStartTimeRef.current;
+              
+              // Only log as error if it persists > 30 seconds OR never reached SUBSCRIBED after 60 seconds
+              if (errorDuration > 30000 || (totalDuration > 60000 && !hasSubscribedRef.current)) {
+                console.error('❌ Announcement realtime CHANNEL_ERROR (persistent):', err);
+                realtimeWorking = false;
+                // Only start polling if we've never successfully subscribed
+                if (!hasSubscribedRef.current && !pollIntervalRef.current) {
+                  console.warn('⚠️ Starting polling fallback due to persistent channel error');
+                  pollIntervalRef.current = setInterval(() => {
+                    loadAnnouncement();
+                  }, 2000);
+                }
+              } else {
+                // Downgrade to info for transient errors
+                console.log('ℹ️ CHANNEL_ERROR — Supabase will auto-reconnect');
+                realtimeWorking = false;
               }
             } else if (status === 'CLOSED') {
-              // CLOSED can happen after SUBSCRIBED - it's not necessarily an error
-              // Supabase will auto-reconnect, so we only log if it's persistent
+              // CLOSED is normal during reconnection - Supabase handles it automatically
               closedCountRef.current++;
               if (closedCountRef.current === 1 && hasSubscribedRef.current) {
                 // First CLOSED after SUBSCRIBED - likely transient, Supabase will reconnect
-                console.log('ℹ️ Announcement realtime CLOSED (Supabase will auto-reconnect)');
+                console.log('ℹ️ Supabase auto-reconnected — no action needed');
               } else if (closedCountRef.current > 3) {
                 // Multiple CLOSED events - might be a persistent issue
                 console.warn('⚠️ Announcement realtime CLOSED multiple times - starting polling fallback');
@@ -179,7 +214,7 @@ const AnnouncementBox = () => {
                 }
               } else if (!hasSubscribedRef.current) {
                 // CLOSED before ever subscribing - might be a real issue
-                console.warn('⚠️ Announcement realtime CLOSED before subscription');
+                console.log('ℹ️ Supabase auto-reconnected — no action needed');
                 realtimeWorking = false;
               }
             }
@@ -187,6 +222,7 @@ const AnnouncementBox = () => {
       } catch (e) {
         console.error('Error setting up realtime subscription:', e);
         realtimeWorking = false;
+        announcementSubscribedRef.current = false;
       }
     }
 
@@ -202,8 +238,15 @@ const AnnouncementBox = () => {
     }, 3000);
 
     return () => {
+      // Guard against recursive cleanup
+      if (!announcementSubscribedRef.current) {
+        return;
+      }
+      
+      announcementSubscribedRef.current = false;
+      
       if (realtimeSubscriptionRef.current) {
-        supabase.removeChannel(realtimeSubscriptionRef.current);
+        realtimeSubscriptionRef.current.unsubscribe();
         realtimeSubscriptionRef.current = null;
       }
       if (pollIntervalRef.current) {

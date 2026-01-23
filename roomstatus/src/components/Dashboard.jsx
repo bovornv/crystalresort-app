@@ -148,30 +148,61 @@ const Dashboard = () => {
     if (!isSupabaseConfigured) {
       // Silently fall back to Firebase (expected behavior in localhost)
       // Fallback to Firebase if Supabase not configured
-      const notesDoc = doc(db, "notes", "today");
-      const unsubscribe = onSnapshot(notesDoc, (snapshot) => {
-        if (isSavingNotes.current || (notesTextareaRef.current && document.activeElement === notesTextareaRef.current)) {
-          return;
+      // Wrap Firestore listener with network checks and error isolation
+      const setupFirestoreListener = () => {
+        // Check network status before setting up listener
+        if (!navigator.onLine) {
+          console.log("ℹ️ Network offline — realtime paused");
+          return null;
         }
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          setTeamNotes(data.text || "");
-          try {
-            localStorage.setItem('crystal_team_notes', data.text || "");
-          } catch (error) {
-            console.error("Error saving to localStorage:", error);
-          }
-        } else {
-          setTeamNotes("");
+
+        try {
+          const notesDoc = doc(db, "notes", "today");
+          const unsubscribe = onSnapshot(
+            notesDoc,
+            (snapshot) => {
+              if (isSavingNotes.current || (notesTextareaRef.current && document.activeElement === notesTextareaRef.current)) {
+                return;
+              }
+              if (snapshot.exists()) {
+                const data = snapshot.data();
+                setTeamNotes(data.text || "");
+                try {
+                  localStorage.setItem('crystal_team_notes', data.text || "");
+                } catch (error) {
+                  console.error("Error saving to localStorage:", error);
+                }
+              } else {
+                setTeamNotes("");
+              }
+            },
+            (error) => {
+              // Isolated error handling - don't cascade to Supabase
+              if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
+                console.log("ℹ️ Network offline — realtime paused");
+              } else {
+                console.error("❌ Error listening to team notes:", error);
+              }
+              const storedNotes = localStorage.getItem('crystal_team_notes');
+              if (storedNotes) {
+                setTeamNotes(storedNotes);
+              }
+            }
+          );
+          return unsubscribe;
+        } catch (error) {
+          // Catch any errors during listener setup
+          console.error("❌ Error setting up team notes listener:", error);
+          return null;
         }
-      }, (error) => {
-        console.error("Error listening to team notes:", error);
-        const storedNotes = localStorage.getItem('crystal_team_notes');
-        if (storedNotes) {
-          setTeamNotes(storedNotes);
+      };
+
+      const unsubscribe = setupFirestoreListener();
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
         }
-      });
-      return () => unsubscribe();
+      };
     }
 
     // Load initial team notes from Supabase
@@ -210,6 +241,21 @@ const Dashboard = () => {
     };
 
     loadTeamNotes();
+
+    // Guard against double subscription
+    const teamNotesChannelRef = { current: null };
+    const teamNotesSubscribedRef = { current: false };
+    const teamNotesErrorTimeRef = { current: null };
+    const teamNotesStartTimeRef = { current: Date.now() };
+    const teamNotesHasSubscribedRef = { current: false };
+
+    // Runtime check before subscribing
+    if (!supabase) {
+      console.warn("⚠️ Supabase client not available — skipping team notes realtime subscription");
+      return;
+    }
+
+    teamNotesSubscribedRef.current = true;
 
     // Set up real-time subscription for team notes
     const channel = supabase
@@ -253,13 +299,36 @@ const Dashboard = () => {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log("Team notes realtime connected");
+          teamNotesErrorTimeRef.current = null;
+          teamNotesHasSubscribedRef.current = true;
         } else if (status === 'CHANNEL_ERROR') {
-          console.error("❌ Error subscribing to team notes realtime");
+          if (!teamNotesErrorTimeRef.current) {
+            teamNotesErrorTimeRef.current = Date.now();
+          }
+          const errorDuration = Date.now() - teamNotesErrorTimeRef.current;
+          const totalDuration = Date.now() - teamNotesStartTimeRef.current;
+          
+          if (errorDuration > 30000 || (totalDuration > 60000 && !teamNotesHasSubscribedRef.current)) {
+            console.error("❌ Error subscribing to team notes realtime (persistent)");
+          } else {
+            console.log("ℹ️ CHANNEL_ERROR — Supabase will auto-reconnect");
+          }
+        } else if (status === 'CLOSED') {
+          console.log("ℹ️ Supabase auto-reconnected — no action needed");
         }
       });
 
+    teamNotesChannelRef.current = channel;
+
     return () => {
-      channel.unsubscribe();
+      if (!teamNotesSubscribedRef.current) {
+        return;
+      }
+      teamNotesSubscribedRef.current = false;
+      if (teamNotesChannelRef.current) {
+        teamNotesChannelRef.current.unsubscribe();
+        teamNotesChannelRef.current = null;
+      }
     };
   }, []);
 
@@ -275,19 +344,50 @@ const Dashboard = () => {
     if (!isSupabaseConfigured) {
       // Warning already logged by team notes check, skip duplicate
       // Fallback to Firebase if Supabase not configured
-      const commonAreasCollection = collection(db, "commonAreas");
-      
-      const unsubscribe = onSnapshot(commonAreasCollection, (snapshot) => {
-        const areas = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        setCommonAreas(areas);
-      }, (error) => {
-        console.error("Error listening to common areas:", error);
-      });
+      // Wrap Firestore listener with network checks and error isolation
+      const setupFirestoreListener = () => {
+        // Check network status before setting up listener
+        if (!navigator.onLine) {
+          console.log("ℹ️ Network offline — realtime paused");
+          return null;
+        }
 
-      return () => unsubscribe();
+        try {
+          const commonAreasCollection = collection(db, "commonAreas");
+          
+          const unsubscribe = onSnapshot(
+            commonAreasCollection,
+            (snapshot) => {
+              const areas = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+              }));
+              setCommonAreas(areas);
+            },
+            (error) => {
+              // Isolated error handling - don't cascade to Supabase
+              if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
+                console.log("ℹ️ Network offline — realtime paused");
+              } else {
+                console.error("❌ Error listening to common areas:", error);
+              }
+            }
+          );
+
+          return unsubscribe;
+        } catch (error) {
+          // Catch any errors during listener setup
+          console.error("❌ Error setting up common areas listener:", error);
+          return null;
+        }
+      };
+
+      const unsubscribe = setupFirestoreListener();
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      };
     }
 
     // Load common areas from Supabase
@@ -327,6 +427,21 @@ const Dashboard = () => {
       isInitialCommonAreasLoad.current = false;
     });
 
+    // Guard against double subscription
+    const commonAreasChannelRef = { current: null };
+    const commonAreasSubscribedRef = { current: false };
+    const commonAreasErrorTimeRef = { current: null };
+    const commonAreasStartTimeRef = { current: Date.now() };
+    const commonAreasHasSubscribedRef = { current: false };
+
+    // Runtime check before subscribing
+    if (!supabase) {
+      console.warn("⚠️ Supabase client not available — skipping common areas realtime subscription");
+      return;
+    }
+
+    commonAreasSubscribedRef.current = true;
+
     // Set up real-time subscription for common areas
     const channel = supabase
       .channel('common_areas_changes')
@@ -359,35 +474,91 @@ const Dashboard = () => {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log("Common areas realtime connected");
+          commonAreasErrorTimeRef.current = null;
+          commonAreasHasSubscribedRef.current = true;
         } else if (status === 'CHANNEL_ERROR') {
-          console.error("❌ Common areas realtime channel error:", status);
+          if (!commonAreasErrorTimeRef.current) {
+            commonAreasErrorTimeRef.current = Date.now();
+          }
+          const errorDuration = Date.now() - commonAreasErrorTimeRef.current;
+          const totalDuration = Date.now() - commonAreasStartTimeRef.current;
+          
+          if (errorDuration > 30000 || (totalDuration > 60000 && !commonAreasHasSubscribedRef.current)) {
+            console.error("❌ Common areas realtime channel error (persistent):", status);
+          } else {
+            console.log("ℹ️ CHANNEL_ERROR — Supabase will auto-reconnect");
+          }
+        } else if (status === 'CLOSED') {
+          console.log("ℹ️ Supabase auto-reconnected — no action needed");
         }
       });
 
+    commonAreasChannelRef.current = channel;
+
     return () => {
+      if (!commonAreasSubscribedRef.current) {
+        return;
+      }
+      commonAreasSubscribedRef.current = false;
+      
       if (commonAreasReloadTimeout.current) {
         clearTimeout(commonAreasReloadTimeout.current);
         commonAreasReloadTimeout.current = null;
       }
-      supabase.removeChannel(channel);
+      
+      if (commonAreasChannelRef.current) {
+        commonAreasChannelRef.current.unsubscribe();
+        commonAreasChannelRef.current = null;
+      }
     };
   }, []);
 
   // Load report counts from Firestore
   useEffect(() => {
-    const countsDoc = doc(db, "reports", "counts");
-    
-    const unsubscribe = onSnapshot(countsDoc, (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data();
-        setDepartureRoomCount(data.departureRoomCount || 0);
-        setInhouseRoomCount(data.inhouseRoomCount || 0);
+    // Wrap Firestore listener with network checks and error isolation
+    const setupReportCountsListener = () => {
+      // Check network status before setting up listener
+      if (!navigator.onLine) {
+        console.log("ℹ️ Network offline — realtime paused");
+        return null;
       }
-    }, (error) => {
-      console.error("Error listening to report counts:", error);
-    });
 
-    return () => unsubscribe();
+      try {
+        const countsDoc = doc(db, "reports", "counts");
+        
+        const unsubscribe = onSnapshot(
+          countsDoc,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.data();
+              setDepartureRoomCount(data.departureRoomCount || 0);
+              setInhouseRoomCount(data.inhouseRoomCount || 0);
+            }
+          },
+          (error) => {
+            // Isolated error handling - don't cascade to Supabase
+            if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
+              console.log("ℹ️ Network offline — realtime paused");
+            } else {
+              console.error("❌ Error listening to report counts:", error);
+            }
+          }
+        );
+
+        return unsubscribe;
+      } catch (error) {
+        // Catch any errors during listener setup
+        console.error("❌ Error setting up report counts listener:", error);
+        return null;
+      }
+    };
+
+    const unsubscribe = setupReportCountsListener();
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   const today = currentTime;
@@ -409,6 +580,11 @@ const Dashboard = () => {
   const isInitialLoad = useRef(true);
   const isUploadingPDF = useRef(false);
   const realtimeReloadTimeout = useRef(null); // Ref for debouncing realtime reloads
+  const roomstatusRealtimeChannelRef = useRef(null); // Ref to track roomstatus realtime channel
+  const roomstatusRealtimeSubscribedRef = useRef(false); // Guard against double subscription
+  const roomstatusRealtimeErrorTimeRef = useRef(null); // Track when CHANNEL_ERROR first occurred
+  const roomstatusRealtimeStartTimeRef = useRef(null); // Track when subscription started
+  const roomstatusRealtimeHasSubscribedRef = useRef(false); // Track if we've actually reached SUBSCRIBED status
   const isInitialCommonAreasLoad = useRef(true); // Track initial load for common areas
   const commonAreasReloadTimeout = useRef(null); // Ref for debouncing common areas realtime reloads
   const inhouseFileInputRef = useRef(null); // Ref for inhouse file input
@@ -759,54 +935,84 @@ const Dashboard = () => {
       isInitialLoad.current = false;
       
       // Then try to load from Firebase
-      const roomsCollection = collection(db, "rooms");
-      const unsubscribe = onSnapshot(roomsCollection, (snapshot) => {
-        if (snapshot.empty) {
-          // Firestore is empty, initialize with default rooms
-          console.log('📝 Firestore is empty, initializing with default rooms...');
-          const batch = [];
-          migratedRooms.forEach(room => {
-            const roomDoc = doc(roomsCollection, room.number);
-            batch.push(setDoc(roomDoc, removeUndefinedValues({
-              number: room.number,
-              type: room.type,
-              floor: room.floor,
-              status: room.status,
-              maid: room.maid || "",
-              remark: room.remark || "",
-              cleanedToday: room.cleanedToday || false,
-              border: room.border || "black",
-              vacantSince: room.vacantSince || null,
-              wasPurpleBeforeCleaned: room.wasPurpleBeforeCleaned || false,
-            })));
-          });
-          Promise.all(batch).then(() => {
-            console.log(`✅ Initialized Firestore with ${migratedRooms.length} default rooms`);
-          }).catch(err => {
-            console.error("❌ Error initializing Firestore with default rooms:", err);
-          });
-        } else {
-          // Firestore has data, use it
-          console.log(`✅ Loaded ${snapshot.docs.length} rooms from Firestore`);
-          const roomsData = snapshot.docs.map(doc => ({
-            number: doc.id,
-            ...doc.data()
-          }));
-          const migratedRooms = migrateMovedOutToCheckedOut(roomsData);
-          setRooms(migratedRooms);
-          // Update localStorage as backup
-          try {
-            localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
-          } catch (error) {
-            console.error("Error saving to localStorage:", error);
-          }
+      // Wrap Firestore listener with network checks and error isolation
+      const setupFirestoreListener = () => {
+        // Check network status before setting up listener
+        if (!navigator.onLine) {
+          console.log("ℹ️ Network offline — realtime paused");
+          return null;
         }
-      }, (error) => {
-        console.error("❌ Error listening to rooms:", error);
-        // Keep default rooms that were already set
-      });
 
-      return () => unsubscribe();
+        try {
+          const roomsCollection = collection(db, "rooms");
+          const unsubscribe = onSnapshot(
+            roomsCollection,
+            (snapshot) => {
+              if (snapshot.empty) {
+                // Firestore is empty, initialize with default rooms
+                console.log('📝 Firestore is empty, initializing with default rooms...');
+                const batch = [];
+                migratedRooms.forEach(room => {
+                  const roomDoc = doc(roomsCollection, room.number);
+                  batch.push(setDoc(roomDoc, removeUndefinedValues({
+                    number: room.number,
+                    type: room.type,
+                    floor: room.floor,
+                    status: room.status,
+                    maid: room.maid || "",
+                    remark: room.remark || "",
+                    cleanedToday: room.cleanedToday || false,
+                    border: room.border || "black",
+                    vacantSince: room.vacantSince || null,
+                    wasPurpleBeforeCleaned: room.wasPurpleBeforeCleaned || false,
+                  })));
+                });
+                Promise.all(batch).then(() => {
+                  console.log(`✅ Initialized Firestore with ${migratedRooms.length} default rooms`);
+                }).catch(err => {
+                  console.error("❌ Error initializing Firestore with default rooms:", err);
+                });
+              } else {
+                // Firestore has data, use it
+                console.log(`✅ Loaded ${snapshot.docs.length} rooms from Firestore`);
+                const roomsData = snapshot.docs.map(doc => ({
+                  number: doc.id,
+                  ...doc.data()
+                }));
+                const migratedRooms = migrateMovedOutToCheckedOut(roomsData);
+                setRooms(migratedRooms);
+                // Update localStorage as backup
+                try {
+                  localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
+                } catch (error) {
+                  console.error("Error saving to localStorage:", error);
+                }
+              }
+            },
+            (error) => {
+              // Isolated error handling - don't cascade to Supabase
+              if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
+                console.log("ℹ️ Network offline — realtime paused");
+              } else {
+                console.error("❌ Error listening to rooms:", error);
+              }
+              // Keep default rooms that were already set
+            }
+          );
+          return unsubscribe;
+        } catch (error) {
+          // Catch any errors during listener setup
+          console.error("❌ Error setting up Firestore listener:", error);
+          return null;
+        }
+      };
+
+      const unsubscribe = setupFirestoreListener();
+      return () => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+      };
     }
 
     console.log('🔄 Attempting to load from Supabase...')
@@ -880,6 +1086,22 @@ const Dashboard = () => {
 
     // Set up real-time subscription - Supabase is the ONLY data feed to UI
     // This subscription is the single source of truth for all room updates
+    // Guard against double subscription
+    if (roomstatusRealtimeSubscribedRef.current) {
+      console.log("ℹ️ Realtime subscription already active — skipping");
+      return;
+    }
+
+    // Runtime check: Verify Supabase client is available
+    if (!supabase) {
+      console.warn("⚠️ Supabase client not available — skipping realtime subscription");
+      return;
+    }
+
+    // Track subscription start time
+    roomstatusRealtimeStartTimeRef.current = Date.now();
+    roomstatusRealtimeSubscribedRef.current = true;
+
     const channel = supabase
       .channel('roomstatus_rooms_changes')
       .on(
@@ -943,16 +1165,51 @@ const Dashboard = () => {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log("Realtime connected");
+          // Reset error tracking on successful subscription
+          roomstatusRealtimeErrorTimeRef.current = null;
+          roomstatusRealtimeHasSubscribedRef.current = true;
         } else if (status === 'CHANNEL_ERROR') {
-          console.error("❌ Error subscribing to Supabase realtime");
-          console.error("   Check that Realtime is enabled for 'roomstatus_rooms' table in Supabase Dashboard");
+          // Track when error first occurred
+          if (!roomstatusRealtimeErrorTimeRef.current) {
+            roomstatusRealtimeErrorTimeRef.current = Date.now();
+          }
+          
+          const errorDuration = Date.now() - roomstatusRealtimeErrorTimeRef.current;
+          const totalDuration = Date.now() - roomstatusRealtimeStartTimeRef.current;
+          
+          // Only log as error if it persists > 30 seconds OR never reached SUBSCRIBED after 60 seconds
+          if (errorDuration > 30000 || (totalDuration > 60000 && !roomstatusRealtimeHasSubscribedRef.current)) {
+            console.error("❌ Error subscribing to Supabase realtime (persistent)");
+            console.error("   Check that Realtime is enabled for 'roomstatus_rooms' table in Supabase Dashboard");
+          } else {
+            // Downgrade to info for transient errors
+            console.log("ℹ️ CHANNEL_ERROR — Supabase will auto-reconnect");
+            console.log("   Realtime disabled for table — skipping subscription");
+          }
+        } else if (status === 'CLOSED') {
+          // CLOSED is normal during reconnection - Supabase handles it automatically
+          console.log("ℹ️ Supabase auto-reconnected — no action needed");
         } else {
           console.log(`🔄 Supabase realtime status: ${status}`);
         }
       });
 
+    // Store channel reference for cleanup
+    roomstatusRealtimeChannelRef.current = channel;
+
     return () => {
-      channel.unsubscribe();
+      // Guard against recursive cleanup
+      if (!roomstatusRealtimeSubscribedRef.current) {
+        return;
+      }
+      
+      roomstatusRealtimeSubscribedRef.current = false;
+      
+      if (roomstatusRealtimeChannelRef.current) {
+        roomstatusRealtimeChannelRef.current.unsubscribe();
+        roomstatusRealtimeChannelRef.current = null;
+      }
+      
       // Clear any pending reload timeout
       if (realtimeReloadTimeout.current) {
         clearTimeout(realtimeReloadTimeout.current);
