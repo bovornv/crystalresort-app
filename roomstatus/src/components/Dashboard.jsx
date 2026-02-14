@@ -87,10 +87,33 @@ const Dashboard = () => {
 
   // Mobile reconnect stability - reconnect Supabase realtime when tab becomes visible
   useEffect(() => {
+    // Check if Supabase is configured before setting up reconnect
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+    const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+      supabaseUrl !== '' && supabaseAnonKey !== '' &&
+      !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key') &&
+      !supabaseUrl.includes('placeholder') && !supabaseAnonKey.includes('placeholder-key');
+
+    if (!isSupabaseConfigured) {
+      // Don't set up reconnect if Supabase is not configured
+      return;
+    }
+
     const handleVisibility = () => {
       if (document.visibilityState === "visible" && supabase) {
         // Reconnect realtime when tab becomes visible (mobile app switching back)
-        supabase.realtime.connect();
+        // Only reconnect if Supabase is actually configured (not placeholder)
+        try {
+          if (supabase.realtime && typeof supabase.realtime.connect === 'function') {
+            supabase.realtime.connect();
+          }
+        } catch (error) {
+          // Silently handle connection errors (Supabase will retry automatically)
+          if (import.meta.env.DEV) {
+            console.log("Realtime reconnect attempted");
+          }
+        }
       }
     };
 
