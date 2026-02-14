@@ -5,8 +5,6 @@ import Footer from "../shared/Footer";
 import "../shared/theme.css";
 import "../shared/shared.css";
 import * as pdfjsLib from "pdfjs-dist";
-import { db } from "../services/firebase";
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { supabase } from "../services/supabase";
 
 // Configure PDF.js worker for Vite - use worker from node_modules to ensure version match
@@ -236,63 +234,16 @@ const Dashboard = () => {
       !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
     if (!isSupabaseConfigured) {
-      // Silently fall back to Firebase (expected behavior in localhost)
-      // Fallback to Firebase if Supabase not configured
-      // Wrap Firestore listener with network checks and error isolation
-      const setupFirestoreListener = () => {
-        // Check network status before setting up listener
-        if (!navigator.onLine) {
-          console.log("ℹ️ Network offline — realtime paused");
-          return null;
-        }
-
-        try {
-          const notesDoc = doc(db, "notes", "today");
-          const unsubscribe = onSnapshot(
-            notesDoc,
-            (snapshot) => {
-              if (isSavingNotes.current || (notesTextareaRef.current && document.activeElement === notesTextareaRef.current)) {
-                return;
-              }
-              if (snapshot.exists()) {
-                const data = snapshot.data();
-                setTeamNotes(data.text || "");
-                try {
-                  localStorage.setItem('crystal_team_notes', data.text || "");
-                } catch (error) {
-                  console.error("Error saving to localStorage:", error);
-                }
-              } else {
-                setTeamNotes("");
-              }
-            },
-            (error) => {
-              // Isolated error handling - don't cascade to Supabase
-              if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
-                console.log("ℹ️ Network offline — realtime paused");
-              } else {
-                console.error("❌ Error listening to team notes:", error);
-              }
-              const storedNotes = localStorage.getItem('crystal_team_notes');
-              if (storedNotes) {
-                setTeamNotes(storedNotes);
-              }
-            }
-          );
-          return unsubscribe;
-        } catch (error) {
-          // Catch any errors during listener setup
-          console.error("❌ Error setting up team notes listener:", error);
-          return null;
-        }
-      };
-
-      const unsubscribe = setupFirestoreListener();
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      };
+      // Only warn in development mode
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ Supabase not configured - team notes will not sync");
+      }
+      // Load from localStorage as fallback
+      const storedNotes = localStorage.getItem('crystal_team_notes');
+      if (storedNotes) {
+        setTeamNotes(storedNotes);
+      }
+      return;
     }
 
     // Load initial team notes from Supabase
@@ -341,7 +292,9 @@ const Dashboard = () => {
 
     // Runtime check before subscribing
     if (!supabase) {
-      console.warn("⚠️ Supabase client not available — skipping team notes realtime subscription");
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ Supabase client not available — skipping team notes realtime subscription");
+      }
       return;
     }
 
@@ -432,52 +385,11 @@ const Dashboard = () => {
       !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key');
 
     if (!isSupabaseConfigured) {
-      // Warning already logged by team notes check, skip duplicate
-      // Fallback to Firebase if Supabase not configured
-      // Wrap Firestore listener with network checks and error isolation
-      const setupFirestoreListener = () => {
-        // Check network status before setting up listener
-        if (!navigator.onLine) {
-          console.log("ℹ️ Network offline — realtime paused");
-          return null;
-        }
-
-        try {
-          const commonAreasCollection = collection(db, "commonAreas");
-          
-          const unsubscribe = onSnapshot(
-            commonAreasCollection,
-            (snapshot) => {
-              const areas = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-              }));
-              setCommonAreas(areas);
-            },
-            (error) => {
-              // Isolated error handling - don't cascade to Supabase
-              if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
-                console.log("ℹ️ Network offline — realtime paused");
-              } else {
-                console.error("❌ Error listening to common areas:", error);
-              }
-            }
-          );
-
-          return unsubscribe;
-        } catch (error) {
-          // Catch any errors during listener setup
-          console.error("❌ Error setting up common areas listener:", error);
-          return null;
-        }
-      };
-
-      const unsubscribe = setupFirestoreListener();
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      };
+      // Only warn in development mode
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ Supabase not configured - common areas will not load");
+      }
+      return;
     }
 
     // Load common areas from Supabase
@@ -526,7 +438,9 @@ const Dashboard = () => {
 
     // Runtime check before subscribing
     if (!supabase) {
-      console.warn("⚠️ Supabase client not available — skipping common areas realtime subscription");
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ Supabase client not available — skipping common areas realtime subscription");
+      }
       return;
     }
 
@@ -603,51 +517,74 @@ const Dashboard = () => {
     };
   }, []);
 
-  // Load report counts from Firestore
+  // Load report counts from Supabase
   useEffect(() => {
-    // Wrap Firestore listener with network checks and error isolation
-    const setupReportCountsListener = () => {
-      // Check network status before setting up listener
-      if (!navigator.onLine) {
-        console.log("ℹ️ Network offline — realtime paused");
-        return null;
+    // Check if Supabase is configured
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
+    const isSupabaseConfigured = supabaseUrl && supabaseAnonKey && 
+      supabaseUrl !== '' && supabaseAnonKey !== '' &&
+      !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key');
+
+    if (!isSupabaseConfigured) {
+      // Only warn in development mode
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ Supabase not configured - report counts will not load");
       }
+      return;
+    }
 
+    // Load initial report counts
+    const loadReportCounts = async () => {
       try {
-        const countsDoc = doc(db, "reports", "counts");
-        
-        const unsubscribe = onSnapshot(
-          countsDoc,
-          (snapshot) => {
-            if (snapshot.exists()) {
-              const data = snapshot.data();
-              setDepartureRoomCount(data.departureRoomCount || 0);
-              setInhouseRoomCount(data.inhouseRoomCount || 0);
-            }
-          },
-          (error) => {
-            // Isolated error handling - don't cascade to Supabase
-            if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
-              console.log("ℹ️ Network offline — realtime paused");
-            } else {
-              console.error("❌ Error listening to report counts:", error);
-            }
-          }
-        );
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('id', 'counts')
+          .single();
 
-        return unsubscribe;
+        if (error && error.code !== 'PGRST116') {
+          console.error("Error loading report counts:", error);
+          return;
+        }
+
+        if (data) {
+          setDepartureRoomCount(data.departureRoomCount || 0);
+          setInhouseRoomCount(data.inhouseRoomCount || 0);
+        }
       } catch (error) {
-        // Catch any errors during listener setup
-        console.error("❌ Error setting up report counts listener:", error);
-        return null;
+        console.error("Error loading report counts:", error);
       }
     };
 
-    const unsubscribe = setupReportCountsListener();
+    loadReportCounts();
+
+    // Set up realtime subscription for report counts
+    const channel = supabase
+      .channel('report_counts_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'reports',
+          filter: 'id=eq.counts'
+        },
+        (payload) => {
+          if (payload.new) {
+            setDepartureRoomCount(payload.new.departureRoomCount || 0);
+            setInhouseRoomCount(payload.new.inhouseRoomCount || 0);
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("Report counts realtime connected");
+        }
+      });
+
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      channel.unsubscribe();
     };
   }, []);
 
@@ -789,35 +726,6 @@ const Dashboard = () => {
     }
   };
 
-  // Helper function to immediately update Firestore (for real-time sync) - KEPT FOR BACKWARD COMPATIBILITY
-  const updateFirestoreImmediately = async (updatedRooms) => {
-    // Also update Supabase
-    await updateSupabaseImmediately(updatedRooms);
-    
-    try {
-      const roomsCollection = collection(db, "rooms");
-      const roomsDoc = doc(roomsCollection, "allRooms");
-      
-      const migratedRooms = migrateMovedOutToCheckedOut(updatedRooms);
-      const payload = {
-        rooms: migratedRooms,
-        lastUpdated: new Date().toISOString(),
-        updatedBy: nickname || "unknown" // Track who made the update for debugging
-      };
-      
-      // Remove all undefined values before sending to Firestore
-      const cleanedPayload = removeUndefinedValues(payload);
-      
-      // Use setDoc with merge: true to preserve other document fields
-      // The rooms array is always complete, so this will update it correctly
-      await setDoc(roomsDoc, cleanedPayload, { merge: true });
-      
-      console.log(`✅ Firestore updated immediately - real-time sync triggered (${migratedRooms.length} rooms, updated by: ${nickname || "unknown"})`);
-    } catch (error) {
-      console.error("Error updating Firestore:", error);
-      // Don't re-throw - Supabase update succeeded
-    }
-  };
 
   // Wrapper function for RoomCard to update a single room immediately (for real-time sync)
   const updateRoomImmediately = async (roomNumber, roomUpdates) => {
@@ -866,7 +774,7 @@ const Dashboard = () => {
     }
   };
 
-  // Default rooms data (fallback if Firestore is empty)
+  // Default rooms data (fallback if Supabase is empty)
   const defaultRooms = [
     // Floor 6
     { number: "601", type: "S", floor: 6, status: "vacant", maid: "", remark: "", cleanedToday: false, border: "black" },
@@ -961,7 +869,7 @@ const Dashboard = () => {
     { number: "111", type: "D5", floor: 1, status: "vacant", maid: "", remark: "", cleanedToday: false },
   ];
 
-  // Helper function to remove undefined values from objects (Firestore doesn't allow undefined)
+  // Helper function to remove undefined values from objects
   const removeUndefinedValues = (obj) => {
     if (obj === null || obj === undefined) {
       return obj;
@@ -1016,93 +924,15 @@ const Dashboard = () => {
       !supabaseUrl.includes('your-project') && !supabaseAnonKey.includes('your-anon-key')
 
     if (!isSupabaseConfigured) {
-      // Fall back to Firebase (expected behavior in localhost)
-      console.log('🔄 Loading rooms from Firebase...');
-      
-      // Initialize with default rooms immediately (so UI shows something)
+      // Only warn in development mode
+      if (import.meta.env.DEV) {
+        console.error("❌ Supabase not configured - rooms will not load");
+      }
+      // Initialize with default rooms as fallback
       const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
       setRooms(migratedRooms);
       isInitialLoad.current = false;
-      
-      // Then try to load from Firebase
-      // Wrap Firestore listener with network checks and error isolation
-      const setupFirestoreListener = () => {
-        // Check network status before setting up listener
-        if (!navigator.onLine) {
-          console.log("ℹ️ Network offline — realtime paused");
-          return null;
-        }
-
-        try {
-          const roomsCollection = collection(db, "rooms");
-          const unsubscribe = onSnapshot(
-            roomsCollection,
-            (snapshot) => {
-              if (snapshot.empty) {
-                // Firestore is empty, initialize with default rooms
-                console.log('📝 Firestore is empty, initializing with default rooms...');
-                const batch = [];
-                migratedRooms.forEach(room => {
-                  const roomDoc = doc(roomsCollection, room.number);
-                  batch.push(setDoc(roomDoc, removeUndefinedValues({
-                    number: room.number,
-                    type: room.type,
-                    floor: room.floor,
-                    status: room.status,
-                    maid: room.maid || "",
-                    remark: room.remark || "",
-                    cleanedToday: room.cleanedToday || false,
-                    border: room.border || "black",
-                    vacantSince: room.vacantSince || null,
-                    wasPurpleBeforeCleaned: room.wasPurpleBeforeCleaned || false,
-                  })));
-                });
-                Promise.all(batch).then(() => {
-                  console.log(`✅ Initialized Firestore with ${migratedRooms.length} default rooms`);
-                }).catch(err => {
-                  console.error("❌ Error initializing Firestore with default rooms:", err);
-                });
-              } else {
-                // Firestore has data, use it
-                console.log(`✅ Loaded ${snapshot.docs.length} rooms from Firestore`);
-                const roomsData = snapshot.docs.map(doc => ({
-                  number: doc.id,
-                  ...doc.data()
-                }));
-                const migratedRooms = migrateMovedOutToCheckedOut(roomsData);
-                setRooms(migratedRooms);
-                // Update localStorage as backup
-                try {
-                  localStorage.setItem('crystal_rooms', JSON.stringify(migratedRooms));
-                } catch (error) {
-                  console.error("Error saving to localStorage:", error);
-                }
-              }
-            },
-            (error) => {
-              // Isolated error handling - don't cascade to Supabase
-              if (error.code === 'unavailable' || error.message?.includes('ERR_INTERNET_DISCONNECTED')) {
-                console.log("ℹ️ Network offline — realtime paused");
-              } else {
-                console.error("❌ Error listening to rooms:", error);
-              }
-              // Keep default rooms that were already set
-            }
-          );
-          return unsubscribe;
-        } catch (error) {
-          // Catch any errors during listener setup
-          console.error("❌ Error setting up Firestore listener:", error);
-          return null;
-        }
-      };
-
-      const unsubscribe = setupFirestoreListener();
-      return () => {
-        if (unsubscribe) {
-          unsubscribe();
-        }
-      };
+      return;
     }
 
     console.log('🔄 Attempting to load from Supabase...')
@@ -1123,7 +953,7 @@ const Dashboard = () => {
             details: error.details,
             hint: error.hint
           });
-          console.error("   Falling back to Firebase. Please check:")
+          console.error("   Please check:")
           console.error("   1. Supabase table 'roomstatus_rooms' exists")
           console.error("   2. Environment variables are set correctly")
           console.error("   3. Row Level Security policies allow access")
@@ -1164,7 +994,7 @@ const Dashboard = () => {
         }
       } catch (error) {
         console.error("❌ Exception loading from Supabase:", error);
-        console.error("   Falling back to Firebase. Check browser console for details.");
+        console.error("   Check browser console for details.");
         // On error during initial load, use defaultRooms as fallback
         const migratedRooms = migrateMovedOutToCheckedOut(defaultRooms);
         setRooms(migratedRooms);
@@ -1184,7 +1014,9 @@ const Dashboard = () => {
 
     // Runtime check: Verify Supabase client is available
     if (!supabase) {
-      console.warn("⚠️ Supabase client not available — skipping realtime subscription");
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ Supabase client not available — skipping realtime subscription");
+      }
       return;
     }
 
@@ -1328,14 +1160,14 @@ const Dashboard = () => {
         return r;
       });
       setRooms(updatedRooms);
-      updateFirestoreImmediately(updatedRooms).catch(err => {
-        console.error("Error fixing rooms 301 and 316 in Firestore:", err);
+      updateSupabaseImmediately(updatedRooms).catch(err => {
+        console.error("Error fixing rooms 301 and 316 in Supabase:", err);
       });
     }
   }, [rooms.length]); // Run when rooms are loaded
 
-  // localStorage is updated by onSnapshot listener above
-  // No separate useEffect needed - Firestore is the source of truth
+  // localStorage is updated by Supabase realtime subscription above
+  // No separate useEffect needed - Supabase is the source of truth
 
   const handleUpload = async (type, file) => {
     if (!file) {
@@ -1355,7 +1187,7 @@ const Dashboard = () => {
       return;
     }
     
-    // Set flag to prevent Firestore listener from overwriting during upload
+    // Set flag to prevent Supabase realtime listener from overwriting during upload
     isUploadingPDF.current = true;
     
     try {
@@ -1552,16 +1384,32 @@ const Dashboard = () => {
       // Store room count from PDF (column 1 count)
       if (type === "departure") {
         setDepartureRoomCount(roomsToUpdate.length);
-        // Save to Firestore
-        await setDoc(doc(db, "reports", "counts"), {
-          departureRoomCount: roomsToUpdate.length,
-        }, { merge: true });
+        // Save to Supabase
+        try {
+          await supabase
+            .from('reports')
+            .upsert({
+              id: 'counts',
+              departureRoomCount: roomsToUpdate.length,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+        } catch (error) {
+          console.error("Error updating departure room count:", error);
+        }
       } else if (type === "inhouse") {
         setInhouseRoomCount(roomsToUpdate.length);
-        // Save to Firestore
-        await setDoc(doc(db, "reports", "counts"), {
-          inhouseRoomCount: roomsToUpdate.length,
-        }, { merge: true });
+        // Save to Supabase
+        try {
+          await supabase
+            .from('reports')
+            .upsert({
+              id: 'counts',
+              inhouseRoomCount: roomsToUpdate.length,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
+        } catch (error) {
+          console.error("Error updating inhouse room count:", error);
+        }
         
         // Extract date from PDF and store room numbers in date-named array
         try {
@@ -1628,25 +1476,39 @@ const Dashboard = () => {
             console.log("⚠️ Date not found in PDF, using current date:", extractedDate);
           }
           
-          // Store roomsToUpdate (first column rooms) in Firestore with date-based key
+          // Store roomsToUpdate (first column rooms) in Supabase with date-based key
           const arrayKey = `occupied_rooms_${extractedDate}`;
-          await setDoc(doc(db, "reports", arrayKey), {
-            rooms: roomsToUpdate, // Store the rooms from first column that were updated
-            date: extractedDate,
-            uploadedAt: new Date().toISOString(),
-          }, { merge: true });
-          
-          console.log(`✅ Stored ${roomsToUpdate.length} rooms in ${arrayKey}:`, roomsToUpdate);
+          try {
+            await supabase
+              .from('reports')
+              .upsert({
+                id: arrayKey,
+                rooms: roomsToUpdate, // Store the rooms from first column that were updated
+                date: extractedDate,
+                uploaded_at: new Date().toISOString(),
+              }, { onConflict: 'id' });
+            console.log(`✅ Stored ${roomsToUpdate.length} rooms in ${arrayKey}:`, roomsToUpdate);
+          } catch (error) {
+            console.error("Error storing occupied rooms:", error);
+          }
           
           // Also store unoccupied_rooms_DD_MM_YYYY = all rooms - extracted rooms
           const allRoomNumbers = rooms.map(r => String(r.number));
           const unoccupiedRooms = allRoomNumbers.filter(roomNum => !roomsToUpdate.includes(roomNum));
           const unoccupiedArrayKey = `unoccupied_rooms_${extractedDate}`;
-          await setDoc(doc(db, "reports", unoccupiedArrayKey), {
-            rooms: unoccupiedRooms, // Store the rooms NOT in the PDF
-            date: extractedDate,
-            uploadedAt: new Date().toISOString(),
-          }, { merge: true });
+          try {
+            await supabase
+              .from('reports')
+              .upsert({
+                id: unoccupiedArrayKey,
+                rooms: unoccupiedRooms, // Store the rooms NOT in the PDF
+                date: extractedDate,
+                uploaded_at: new Date().toISOString(),
+              }, { onConflict: 'id' });
+            console.log(`✅ Stored ${unoccupiedRooms.length} unoccupied rooms in ${unoccupiedArrayKey}:`, unoccupiedRooms);
+          } catch (error) {
+            console.error("Error storing unoccupied rooms:", error);
+          }
           
           console.log(`✅ Stored ${unoccupiedRooms.length} unoccupied rooms in ${unoccupiedArrayKey}:`, unoccupiedRooms);
         } catch (error) {
@@ -1654,9 +1516,9 @@ const Dashboard = () => {
         }
       }
 
-      // Write to Firestore immediately for real-time sync
-      await updateFirestoreImmediately(updatedRooms);
-        console.log(`✅ PDF upload synced to Firestore - ${roomsToUpdate.length} rooms updated`);
+      // Write to Supabase immediately for real-time sync
+      await updateSupabaseImmediately(updatedRooms);
+        console.log(`✅ PDF upload synced to Supabase - ${roomsToUpdate.length} rooms updated`);
 
       // Show success toast with count
       const statusText = type === "departure" ? "จะออกวันนี้" : "พักต่อ";
@@ -1669,11 +1531,11 @@ const Dashboard = () => {
         departureFileInputRef.current.value = "";
       }
       
-      // Reset flag after Firestore write completes (short delay for safety)
+      // Reset flag after Supabase write completes (short delay for safety)
       setTimeout(() => {
         isUploadingPDF.current = false;
         console.log("PDF upload flag reset");
-      }, 2000); // 2 seconds is enough for Firestore write to complete
+      }, 2000); // 2 seconds is enough for Supabase write to complete
     } catch (error) {
       console.error("Error processing PDF:", error);
       alert(`เกิดข้อผิดพลาดในการประมวลผล PDF: ${error.message}`);
@@ -1854,25 +1716,9 @@ const Dashboard = () => {
       setRooms(updatedRooms);
       setUnoccupiedRooms3d(new Set(unoccupied3d));
       
-      // Save to Firestore immediately for real-time sync
-      await updateFirestoreImmediately(updatedRooms);
-      console.log(`✅ Updated ${unoccupied3d.length} rooms to unoccupied_3d status and synced to Firestore`);
-      
-      // Delete all arrays whose name starts with unoccupied_rooms
-      const reportsCollection = collection(db, "reports");
-      const allReportsSnapshot = await getDocs(reportsCollection);
-      const deletePromises = [];
-      
-      allReportsSnapshot.docs.forEach(docSnap => {
-        const docId = docSnap.id;
-        if (docId.startsWith("unoccupied_rooms_")) {
-          deletePromises.push(deleteDoc(doc(db, "reports", docId)));
-          console.log(`🗑️ Deleting ${docId}`);
-        }
-      });
-      
-      await Promise.all(deletePromises);
-      console.log(`✅ Deleted ${deletePromises.length} unoccupied_rooms_ arrays`);
+      // Save to Supabase immediately for real-time sync
+      await updateSupabaseImmediately(updatedRooms);
+      console.log(`✅ Updated ${unoccupied3d.length} rooms to unoccupied_3d status and synced to Supabase`);
       
       alert(`อัปเดต ${unoccupied3d.length} ห้องเป็นสีม่วง (ไม่มีเข้าพัก 3 วันติด) และลบข้อมูล unoccupied_rooms_ ทั้งหมดแล้ว`);
       
@@ -2004,14 +1850,26 @@ const Dashboard = () => {
       // Clear report counts
       setDepartureRoomCount(0);
       setInhouseRoomCount(0);
-      await setDoc(doc(db, "reports", "counts"), {
-        departureRoomCount: 0,
-        inhouseRoomCount: 0,
-      }, { merge: true });
+      
+      // Update report counts in Supabase
+      try {
+        const { error } = await supabase
+          .from('reports')
+          .upsert({
+            id: 'counts',
+            departureRoomCount: 0,
+            inhouseRoomCount: 0,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        
+        if (error) throw error;
+      } catch (error) {
+        console.error("Error updating report counts in Supabase:", error);
+      }
 
-      // Write rooms to Firestore immediately for real-time sync
-      await updateFirestoreImmediately(clearedRooms);
-      console.log("✅ Clear rooms data synced to Firestore");
+      // Write rooms to Supabase immediately for real-time sync
+      await updateSupabaseImmediately(clearedRooms);
+      console.log("✅ Clear rooms data synced to Supabase");
       console.log(`Cleared ${clearedRooms.filter(r => r.status === "vacant").length} rooms to vacant`);
 
       // --- Clear all common area data ---
@@ -2066,42 +1924,9 @@ const Dashboard = () => {
           throw error;
         }
       } else {
-        // Fallback to Firebase
-        const areaSnapshot = await getDocs(collection(db, "commonAreas"));
-        console.log(`📋 Found ${areaSnapshot.docs.length} common area documents to clear`);
-        
-        if (areaSnapshot.docs.length === 0) {
-          console.log("⚠️ No common area documents found in Firestore");
+        if (import.meta.env.DEV) {
+          console.warn("⚠️ Supabase not configured - cannot clear common areas");
         }
-        
-        const areaPromises = areaSnapshot.docs.map(async (docSnap) => {
-          const docId = docSnap.id;
-          const data = docSnap.data();
-          
-          if (!data.area || !data.time) {
-            console.warn(`⚠️ Skipping document ${docId} - missing area or time field`, data);
-            return;
-          }
-          
-          const updateData = {
-            status: "waiting",
-            maid: "",
-            border: "black",
-          };
-          
-          if (data.area) updateData.area = data.area;
-          if (data.time) updateData.time = data.time;
-          
-          await setDoc(
-            doc(db, "commonAreas", docId),
-            updateData,
-            { merge: true }
-          );
-          console.log(`✅ Cleared area ${docId}`, updateData);
-        });
-
-        await Promise.all(areaPromises);
-        console.log(`✅ Successfully cleared ${areaSnapshot.docs.length} common areas to waiting state`);
       }
 
       alert("ข้อมูลทั้งหมดถูกล้างเรียบร้อยแล้ว ✅");
@@ -2376,13 +2201,9 @@ const Dashboard = () => {
                     if (error) throw error;
                     console.log("✅ Team notes saved to Supabase");
                   } else {
-                    // Fallback to Firebase
-                    const notesDoc = doc(db, "notes", "today");
-                    await setDoc(notesDoc, { 
-                      text: teamNotes,
-                      lastUpdated: serverTimestamp()
-                    }, { merge: true });
-                    console.log("✅ Team notes saved to Firestore (fallback)");
+                    if (import.meta.env.DEV) {
+                      console.warn("⚠️ Supabase not configured - team notes not saved");
+                    }
                   }
                   
                   setTimeout(() => {

@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "../services/firebase";
 import { motion, AnimatePresence } from "framer-motion";
 
 const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, currentNickname, currentDate }) => {

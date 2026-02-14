@@ -111,7 +111,9 @@ const AnnouncementBox = () => {
 
       // Runtime check: Verify Supabase client is available
       if (!supabase) {
-        console.warn("⚠️ Supabase client not available — skipping realtime subscription");
+        if (import.meta.env.DEV) {
+          console.warn("⚠️ Supabase client not available — skipping realtime subscription");
+        }
         return;
       }
 
