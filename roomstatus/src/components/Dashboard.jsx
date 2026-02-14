@@ -85,6 +85,22 @@ const Dashboard = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // Mobile reconnect stability - reconnect Supabase realtime when tab becomes visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && supabase) {
+        // Reconnect realtime when tab becomes visible (mobile app switching back)
+        supabase.realtime.connect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
   // Close user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -134,95 +150,6 @@ const Dashboard = () => {
     return () => clearInterval(logoutCheckInterval);
   }, []);
 
-  // Auto-logout at midnight BKK time (UTC+7) every day
-  useEffect(() => {
-    const checkMidnightLogout = () => {
-      // Get current time in Bangkok timezone using Intl.DateTimeFormat
-      const now = new Date();
-      const bkkFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Bangkok',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      });
-      const dateFormatter = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Bangkok'
-      });
-      
-      const bkkTimeParts = bkkFormatter.formatToParts(now);
-      const hours = parseInt(bkkTimeParts.find(part => part.type === 'hour')?.value || '0');
-      const minutes = parseInt(bkkTimeParts.find(part => part.type === 'minute')?.value || '0');
-      const seconds = parseInt(bkkTimeParts.find(part => part.type === 'second')?.value || '0');
-      
-      // Get today's date string in BKK timezone (YYYY-MM-DD format)
-      const todayBKK = dateFormatter.format(now);
-      const lastLogoutDate = localStorage.getItem('crystal_last_midnight_logout_date');
-      
-      // Check if it's midnight (00:00:00 to 00:00:59) in Bangkok time
-      if (hours === 0 && minutes === 0 && seconds < 60) {
-        // Only logout once per day
-        if (lastLogoutDate !== todayBKK && isLoggedIn) {
-          console.log(`🕛 Midnight BKK time reached - logging out all users`);
-          
-          // Set logout timestamp to sync across all devices/tabs
-          const logoutTimestamp = new Date().getTime();
-          localStorage.setItem('crystal_logout_timestamp', logoutTimestamp.toString());
-          localStorage.setItem('crystal_last_midnight_logout_date', todayBKK);
-          
-          // Logout current user
-          setIsLoggedIn(false);
-          setNickname("");
-          setShowUserMenu(false);
-          localStorage.removeItem('crystal_nickname');
-          localStorage.removeItem('crystal_login_timestamp');
-          setShowLoginModal(true);
-        }
-      }
-    };
-
-    // Check immediately on mount
-    checkMidnightLogout();
-    
-    // Check every second when very close to midnight (23:59:00 to 00:01:00), every minute otherwise
-    // This ensures we catch midnight exactly without wasting resources
-    const bkkTimeFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Bangkok',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    });
-    
-    let checkInterval = setInterval(() => {
-      const now = new Date();
-      const bkkTimeParts = bkkTimeFormatter.formatToParts(now);
-      const hours = parseInt(bkkTimeParts.find(part => part.type === 'hour')?.value || '0');
-      const minutes = parseInt(bkkTimeParts.find(part => part.type === 'minute')?.value || '0');
-      
-      // Check every second when we're very close to midnight (23:59-00:01)
-      if ((hours === 23 && minutes === 59) || (hours === 0 && minutes <= 1)) {
-        checkMidnightLogout();
-      }
-    }, 1000); // Check every second near midnight
-    
-    // Also check every minute as a fallback for the rest of the day
-    const fallbackInterval = setInterval(() => {
-      const now = new Date();
-      const bkkTimeParts = bkkTimeFormatter.formatToParts(now);
-      const hours = parseInt(bkkTimeParts.find(part => part.type === 'hour')?.value || '0');
-      const minutes = parseInt(bkkTimeParts.find(part => part.type === 'minute')?.value || '0');
-      
-      // Only check if we're not in the high-frequency check window
-      if (!((hours === 23 && minutes === 59) || (hours === 0 && minutes <= 1))) {
-        checkMidnightLogout();
-      }
-    }, 60000); // Check every minute otherwise
-    
-    return () => {
-      clearInterval(checkInterval);
-      clearInterval(fallbackInterval);
-    };
-  }, [isLoggedIn]);
 
   // Load team notes from Supabase on mount and set up real-time listener
   useEffect(() => {
@@ -1029,7 +956,7 @@ const Dashboard = () => {
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to INSERT, UPDATE, DELETE
+          event: 'UPDATE', // Listen to UPDATE only (rooms are never inserted/deleted, only updated)
           schema: 'public',
           table: 'roomstatus_rooms'
         },
