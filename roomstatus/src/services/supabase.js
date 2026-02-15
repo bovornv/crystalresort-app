@@ -1,5 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
+// Check authentication before initializing Supabase
+const isAuthenticated = typeof window !== 'undefined' && 
+  localStorage.getItem("crystal_roomstatus_auth") === "true";
+
 // Supabase configuration using environment variables
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
@@ -20,10 +24,10 @@ if (import.meta.env.DEV) {
 }
 
 // Create a single Supabase client instance
-// Only create client if configured, otherwise create a no-op client that won't attempt connections
+// Only create client if authenticated AND configured, otherwise create a no-op client that won't attempt connections
 let supabaseClient;
 
-if (isSupabaseConfigured) {
+if (isAuthenticated && isSupabaseConfigured) {
   supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 } else {
   // Create a minimal client that won't attempt realtime connections

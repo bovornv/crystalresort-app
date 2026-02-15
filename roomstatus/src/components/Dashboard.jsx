@@ -14,14 +14,31 @@ if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
 }
 
 // Login Modal Component
+const INTERNAL_PASSWORD = "crystal1268";
+
 const LoginModal = ({ onLogin }) => {
   const [nickname, setNickname] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (nickname.trim()) {
-      onLogin(nickname);
+    setError("");
+    
+    // Check nickname
+    if (!nickname.trim()) {
+      setError("กรุณากรอกชื่อเล่น");
+      return;
     }
+    
+    // Check password
+    if (password !== INTERNAL_PASSWORD) {
+      setError("รหัสผ่านไม่ถูกต้อง");
+      return;
+    }
+    
+    // Password correct - proceed with login
+    onLogin(nickname.trim());
   };
 
   return (
@@ -29,11 +46,29 @@ const LoginModal = ({ onLogin }) => {
       <input
         type="text"
         value={nickname}
-        onChange={(e) => setNickname(e.target.value)}
+        onChange={(e) => {
+          setNickname(e.target.value);
+          setError("");
+        }}
         placeholder="กรอกชื่อเล่น"
         className="w-full border rounded-lg p-3 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#15803D]"
         autoFocus
       />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => {
+          setPassword(e.target.value);
+          setError("");
+        }}
+        placeholder="รหัสผ่าน"
+        className="w-full border rounded-lg p-3 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-[#15803D]"
+      />
+      {error && (
+        <div className="text-red-600 text-sm mb-4 text-center">
+          {error}
+        </div>
+      )}
       <button
         type="submit"
         className="w-full bg-[#15803D] text-white py-2 rounded-lg hover:bg-[#166534] transition-colors"
@@ -135,42 +170,28 @@ const Dashboard = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showUserMenu]);
 
-  // Check if user is logged in from localStorage on mount and verify logout status
+  // Check if user is logged in from localStorage on mount
   useEffect(() => {
     const checkLoginStatus = () => {
-      const storedNickname = localStorage.getItem('nickname') || localStorage.getItem('crystal_nickname');
-      const loginTimestamp = localStorage.getItem('crystal_login_timestamp');
-      const logoutTimestamp = localStorage.getItem('crystal_logout_timestamp');
+      // Check new auth system first
+      const isAuthenticated = localStorage.getItem("crystal_roomstatus_auth") === "true";
+      const storedNickname = localStorage.getItem("crystal_roomstatus_name") || 
+                             localStorage.getItem('crystal_nickname') || 
+                             localStorage.getItem('nickname');
       
-      // Check if user was logged out on another device
-      if (storedNickname && loginTimestamp && logoutTimestamp) {
-        const loginTime = parseInt(loginTimestamp);
-        const logoutTime = parseInt(logoutTimestamp);
-        
-        // If logout happened after login, user is logged out
-        if (logoutTime > loginTime) {
-          localStorage.removeItem('crystal_nickname');
-          localStorage.removeItem('nickname');
-          localStorage.removeItem('crystal_login_timestamp');
-          setIsLoggedIn(false);
-          setNickname("");
-          return;
-        }
-      }
-      
-      if (storedNickname) {
+      if (isAuthenticated && storedNickname) {
         setNickname(storedNickname);
         setIsLoggedIn(true);
+        setShowLoginModal(false);
+      } else {
+        // Not authenticated - show login modal
+        setShowLoginModal(true);
+        setIsLoggedIn(false);
+        setNickname("");
       }
-      // Don't automatically show login modal - user clicks button instead
     };
 
     checkLoginStatus();
-    
-    // Check for logout events periodically (every 5 seconds)
-    const logoutCheckInterval = setInterval(checkLoginStatus, 5000);
-    
-    return () => clearInterval(logoutCheckInterval);
   }, []);
 
 
@@ -1728,25 +1749,27 @@ const Dashboard = () => {
   const handleLogin = (nicknameInput) => {
     if (nicknameInput && nicknameInput.trim()) {
       const trimmedNickname = nicknameInput.trim();
-      const loginTimestamp = new Date().getTime();
-      setNickname(trimmedNickname);
-      setIsLoggedIn(true);
-      setShowLoginModal(false);
+      // Save permanently in localStorage
+      localStorage.setItem("crystal_roomstatus_auth", "true");
+      localStorage.setItem("crystal_roomstatus_name", trimmedNickname);
+      // Keep old keys for backward compatibility if needed
       localStorage.setItem('crystal_nickname', trimmedNickname);
-      localStorage.setItem('crystal_login_timestamp', loginTimestamp.toString());
+      // Reload page to initialize Supabase with authenticated state
+      window.location.reload();
     }
   };
 
   const handleLogout = () => {
-    const logoutTimestamp = new Date().getTime();
-    setIsLoggedIn(false);
-    setNickname("");
-    setShowUserMenu(false); // Close menu when logging out
-    // Store logout timestamp to sync across devices
-    localStorage.setItem('crystal_logout_timestamp', logoutTimestamp.toString());
+    // Remove auth state
+    localStorage.removeItem("crystal_roomstatus_auth");
+    localStorage.removeItem("crystal_roomstatus_name");
+    // Also remove old keys for cleanup
     localStorage.removeItem('crystal_nickname');
+    localStorage.removeItem('nickname');
     localStorage.removeItem('crystal_login_timestamp');
-    setShowLoginModal(true);
+    localStorage.removeItem('crystal_logout_timestamp');
+    // Reload page to reset state
+    window.location.reload();
   };
 
   const handleClearDataClick = () => {
@@ -2056,6 +2079,16 @@ const Dashboard = () => {
 
       {/* Page Title & User Menu */}
       <div className="bg-slate-700 text-white py-4 px-6 mb-6 relative">
+        {/* Fixed Logout Button - Top Right */}
+        {isLoggedIn && (
+          <button
+            onClick={handleLogout}
+            className="fixed top-4 right-4 px-3 py-1.5 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700 transition-colors z-50 shadow-md"
+          >
+            ออกจากระบบ
+          </button>
+        )}
+        
         {/* Login/User Pill Button - Top Right */}
         <div className="absolute top-4 right-6 user-menu-container">
           {isLoggedIn ? (
@@ -2318,12 +2351,12 @@ const Dashboard = () => {
       <div className="flex items-center gap-4 mb-6 text-sm">
         <span className="font-semibold text-[#15803D]">สรุปจำนวนห้องที่รอเข้าทำ (วันนี้):</span>
         {(() => {
-          // Use counts from PDF uploads
-          // ห้องออกวันนี้ = number of rooms from expected departure PDF (column 1)
-          const departureCount = departureRoomCount;
+          // Calculate counts from actual room statuses
+          // ห้องออกวันนี้ = rooms with status "will_depart_today" (yellow)
+          const departureCount = rooms.filter(r => r.status === "will_depart_today").length;
 
-          // ห้องพักต่อ = number of rooms from in-house PDF (column 1) - number of rooms from expected departure PDF (column 1)
-          const inhouseCount = Math.max(0, inhouseRoomCount - departureRoomCount);
+          // ห้องพักต่อ = rooms with status "stay_clean" (blue)
+          const inhouseCount = rooms.filter(r => r.status === "stay_clean").length;
 
           const total = departureCount + inhouseCount;
 
