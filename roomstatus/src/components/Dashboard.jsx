@@ -520,8 +520,8 @@ const Dashboard = () => {
         }
 
         if (data) {
-          setDepartureRoomCount(data.departureRoomCount || 0);
-          setInhouseRoomCount(data.inhouseRoomCount || 0);
+          setDepartureRoomCount(data.departure_room_count || 0);
+          setInhouseRoomCount(data.inhouse_room_count || 0);
         }
       } catch (error) {
         console.error("Error loading report counts:", error);
@@ -543,8 +543,8 @@ const Dashboard = () => {
         },
         (payload) => {
           if (payload.new) {
-            setDepartureRoomCount(payload.new.departureRoomCount || 0);
-            setInhouseRoomCount(payload.new.inhouseRoomCount || 0);
+            setDepartureRoomCount(payload.new.departure_room_count || 0);
+            setInhouseRoomCount(payload.new.inhouse_room_count || 0);
           }
         }
       )
@@ -1361,7 +1361,7 @@ const Dashboard = () => {
             .from('reports')
             .upsert({
               id: 'counts',
-              departureRoomCount: roomsToUpdate.length,
+              departure_room_count: roomsToUpdate.length,
               updated_at: new Date().toISOString()
             }, { onConflict: 'id' });
         } catch (error) {
@@ -1375,7 +1375,7 @@ const Dashboard = () => {
             .from('reports')
             .upsert({
               id: 'counts',
-              inhouseRoomCount: roomsToUpdate.length,
+              inhouse_room_count: roomsToUpdate.length,
               updated_at: new Date().toISOString()
             }, { onConflict: 'id' });
         } catch (error) {
@@ -1830,8 +1830,8 @@ const Dashboard = () => {
           .from('reports')
           .upsert({
             id: 'counts',
-            departureRoomCount: 0,
-            inhouseRoomCount: 0,
+            departure_room_count: 0,
+            inhouse_room_count: 0,
             updated_at: new Date().toISOString()
           }, { onConflict: 'id' });
         
