@@ -80,10 +80,26 @@ if (isAuthenticated && isSupabaseConfigured) {
     }
   };
 
+  // Mock channel object that matches Supabase's channel API
+  const mockChannel = {
+    on: function() { return this; },
+    subscribe: function(callback) { 
+      // If callback provided, call it with a safe status
+      if (typeof callback === 'function') {
+        // Use setTimeout to make it async like real Supabase
+        setTimeout(() => callback('CLOSED'), 0);
+      }
+      return this; 
+    },
+    unsubscribe: function() { return this; },
+    send: function() { return this; }
+  };
+
   supabaseClient = {
     from: function() { return mockQueryBuilder; },
     rpc: function() { return Promise.resolve({ data: null, error: null }); },
     rest: function() { return mockQueryBuilder; },
+    channel: function() { return mockChannel; },
     auth: {
       getUser: function() { return Promise.resolve({ data: { user: null }, error: null }); },
       getSession: function() { return Promise.resolve({ data: { session: null }, error: null }); },
