@@ -30,42 +30,77 @@ let supabaseClient;
 if (isAuthenticated && isSupabaseConfigured) {
   supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 } else {
-  // Create a minimal client that won't attempt realtime connections
-  // Use a valid-looking but non-functional URL to prevent connection attempts
-  supabaseClient = createClient('https://placeholder.supabase.co', 'placeholder-key', {
-    realtime: {
-      // Disable realtime completely for placeholder client
-      transport: 'websocket',
-      params: {
-        eventsPerSecond: 0
-      }
+  // Create a completely no-op client that won't attempt any connections
+  // Mock all methods to prevent network requests
+  const mockQueryBuilder = {
+    select: function() { return this; },
+    insert: function() { return this; },
+    update: function() { return this; },
+    upsert: function() { return this; },
+    delete: function() { return this; },
+    eq: function() { return this; },
+    neq: function() { return this; },
+    gt: function() { return this; },
+    gte: function() { return this; },
+    lt: function() { return this; },
+    lte: function() { return this; },
+    like: function() { return this; },
+    ilike: function() { return this; },
+    is: function() { return this; },
+    in: function() { return this; },
+    contains: function() { return this; },
+    containedBy: function() { return this; },
+    rangeGt: function() { return this; },
+    rangeGte: function() { return this; },
+    rangeLt: function() { return this; },
+    rangeLte: function() { return this; },
+    rangeAdjacent: function() { return this; },
+    overlaps: function() { return this; },
+    textSearch: function() { return this; },
+    match: function() { return this; },
+    not: function() { return this; },
+    or: function() { return this; },
+    filter: function() { return this; },
+    order: function() { return this; },
+    limit: function() { return this; },
+    range: function() { return this; },
+    abortSignal: function() { return this; },
+    single: function() { return Promise.resolve({ data: null, error: null }); },
+    maybeSingle: function() { return Promise.resolve({ data: null, error: null }); },
+    csv: function() { return Promise.resolve({ data: null, error: null }); },
+    geojson: function() { return Promise.resolve({ data: null, error: null }); },
+    explain: function() { return Promise.resolve({ data: null, error: null }); },
+    rollback: function() { return Promise.resolve({ data: null, error: null }); },
+    returns: function() { return this; },
+    then: function(resolve) { 
+      return Promise.resolve({ data: null, error: null }).then(resolve); 
     },
+    catch: function(reject) { 
+      return Promise.resolve({ data: null, error: null }).catch(reject); 
+    }
+  };
+
+  supabaseClient = {
+    from: function() { return mockQueryBuilder; },
+    rpc: function() { return Promise.resolve({ data: null, error: null }); },
+    rest: function() { return mockQueryBuilder; },
     auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  });
-  
-  // Replace realtime with a mock object to prevent any connection attempts
-  if (supabaseClient.realtime) {
-    // Disconnect any existing connection first
-    try {
-      supabaseClient.realtime.disconnect();
-    } catch (e) {
-      // Ignore errors
-    }
-    
-    // Replace realtime with a mock that prevents all connection attempts
-    supabaseClient.realtime = {
-      connect: function() {
-        // No-op: don't attempt to connect with placeholder values
-        return this;
-      },
-      disconnect: function() {
-        return this;
-      },
+      getUser: function() { return Promise.resolve({ data: { user: null }, error: null }); },
+      getSession: function() { return Promise.resolve({ data: { session: null }, error: null }); },
+      signUp: function() { return Promise.resolve({ data: { user: null, session: null }, error: null }); },
+      signInWithPassword: function() { return Promise.resolve({ data: { user: null, session: null }, error: null }); },
+      signInWithOtp: function() { return Promise.resolve({ data: null, error: null }); },
+      signInWithOAuth: function() { return Promise.resolve({ data: null, error: null }); },
+      signOut: function() { return Promise.resolve({ error: null }); },
+      verifyOtp: function() { return Promise.resolve({ data: { user: null, session: null }, error: null }); },
+      refreshSession: function() { return Promise.resolve({ data: { session: null }, error: null }); },
+      setSession: function() { return Promise.resolve({ data: { session: null }, error: null }); },
+      onAuthStateChange: function() { return { data: { subscription: null }, error: null }; }
+    },
+    realtime: {
+      connect: function() { return this; },
+      disconnect: function() { return this; },
       channel: function(name, opts) {
-        // Return a mock channel that won't attempt connections
         return {
           on: function() { return this; },
           subscribe: function() { return this; },
@@ -76,8 +111,23 @@ if (isAuthenticated && isSupabaseConfigured) {
       removeChannel: function() { return this; },
       removeAllChannels: function() { return this; },
       isConnected: function() { return false; }
-    };
-  }
+    },
+    storage: {
+      from: function() {
+        return {
+          upload: function() { return Promise.resolve({ data: null, error: null }); },
+          download: function() { return Promise.resolve({ data: null, error: null }); },
+          list: function() { return Promise.resolve({ data: null, error: null }); },
+          remove: function() { return Promise.resolve({ data: null, error: null }); },
+          createSignedUrl: function() { return Promise.resolve({ data: null, error: null }); },
+          getPublicUrl: function() { return { data: { publicUrl: '' } }; }
+        };
+      }
+    },
+    functions: {
+      invoke: function() { return Promise.resolve({ data: null, error: null }); }
+    }
+  };
 }
 
 export const supabase = supabaseClient;
