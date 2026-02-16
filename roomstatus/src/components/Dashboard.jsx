@@ -2351,13 +2351,11 @@ const Dashboard = () => {
       <div className="flex items-center gap-4 mb-6 text-sm">
         <span className="font-semibold text-[#15803D]">สรุปจำนวนห้องที่รอเข้าทำ (วันนี้):</span>
         {(() => {
-          // Calculate counts from actual room statuses
-          // ห้องออกวันนี้ = rooms with status "will_depart_today" (yellow)
-          const departureCount = rooms.filter(r => r.status === "will_depart_today").length;
-
-          // ห้องพักต่อ = rooms with status "stay_clean" (blue)
-          const inhouseCount = rooms.filter(r => r.status === "stay_clean").length;
-
+          // Use stored counts from PDF uploads (only updated by FO user)
+          // These counts only change when FO uploads PDFs or clears data
+          // They do NOT change when maids update room statuses
+          const departureCount = departureRoomCount;
+          const inhouseCount = inhouseRoomCount;
           const total = departureCount + inhouseCount;
 
           return (
