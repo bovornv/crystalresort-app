@@ -100,7 +100,8 @@ const Dashboard = () => {
   const notesTextareaRef = useRef(null);
   const [commonAreas, setCommonAreas] = useState([]);
   const [departureRoomCount, setDepartureRoomCount] = useState(0); // Count from expected departure PDF
-  const [inhouseRoomCount, setInhouseRoomCount] = useState(0); // Count from in-house PDF
+  const [inhouseRoomCount, setInhouseRoomCount] = useState(0); // Count from in-house PDF (calculated: raw in-house - departure)
+  const rawInhouseCountRef = useRef(0); // Store raw count from in-house PDF (1st column count)
   const [showUnoccupiedRooms, setShowUnoccupiedRooms] = useState(false); // Toggle showing rooms unoccupied for 3+ days
   const [unoccupiedRooms3d, setUnoccupiedRooms3d] = useState(new Set()); // Set of room numbers unoccupied for 3+ days
   const [showUnoccupied3dModal, setShowUnoccupied3dModal] = useState(false); // Show popup for 3-day unoccupied rooms
@@ -521,7 +522,16 @@ const Dashboard = () => {
 
         if (data) {
           setDepartureRoomCount(data.departure_room_count || 0);
-          setInhouseRoomCount(data.inhouse_room_count || 0);
+          // Restore raw in-house count from Supabase if available
+          if (data.raw_inhouse_count !== undefined && data.raw_inhouse_count !== null) {
+            rawInhouseCountRef.current = data.raw_inhouse_count;
+            // Recalculate in-house count: raw count - departure count
+            const recalculatedInhouseCount = data.raw_inhouse_count - (data.departure_room_count || 0);
+            setInhouseRoomCount(Math.max(0, recalculatedInhouseCount));
+          } else {
+            // Fallback to stored calculated value if raw count not available
+            setInhouseRoomCount(data.inhouse_room_count || 0);
+          }
         }
       } catch (error) {
         console.error("Error loading report counts:", error);
@@ -544,7 +554,16 @@ const Dashboard = () => {
         (payload) => {
           if (payload.new) {
             setDepartureRoomCount(payload.new.departure_room_count || 0);
-            setInhouseRoomCount(payload.new.inhouse_room_count || 0);
+            // Restore raw in-house count if available
+            if (payload.new.raw_inhouse_count !== undefined && payload.new.raw_inhouse_count !== null) {
+              rawInhouseCountRef.current = payload.new.raw_inhouse_count;
+              // Recalculate: raw count - departure count
+              const recalculatedInhouseCount = payload.new.raw_inhouse_count - (payload.new.departure_room_count || 0);
+              setInhouseRoomCount(Math.max(0, recalculatedInhouseCount));
+            } else {
+              // Fallback to stored calculated value
+              setInhouseRoomCount(payload.new.inhouse_room_count || 0);
+            }
           }
         }
       )
@@ -1354,28 +1373,50 @@ const Dashboard = () => {
 
       // Store room count from PDF (column 1 count)
       if (type === "departure") {
-        setDepartureRoomCount(roomsToUpdate.length);
+        const newDepartureCount = roomsToUpdate.length;
+        setDepartureRoomCount(newDepartureCount);
+        
+        // Recalculate in-house count if raw in-house count exists
+        // ห้องพักต่อ = raw in-house PDF count - departure PDF count
+        if (rawInhouseCountRef.current > 0) {
+          const recalculatedInhouseCount = rawInhouseCountRef.current - newDepartureCount;
+          setInhouseRoomCount(Math.max(0, recalculatedInhouseCount)); // Ensure non-negative
+        }
+        
         // Save to Supabase
         try {
+          const updateData = {
+            id: 'counts',
+            departure_room_count: newDepartureCount,
+            updated_at: new Date().toISOString()
+          };
+          // Also update in-house count if we recalculated it
+          if (rawInhouseCountRef.current > 0) {
+            updateData.inhouse_room_count = Math.max(0, rawInhouseCountRef.current - newDepartureCount);
+          }
           await supabase
             .from('reports')
-            .upsert({
-              id: 'counts',
-              departure_room_count: roomsToUpdate.length,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'id' });
+            .upsert(updateData, { onConflict: 'id' });
         } catch (error) {
           console.error("Error updating departure room count:", error);
         }
       } else if (type === "inhouse") {
-        setInhouseRoomCount(roomsToUpdate.length);
-        // Save to Supabase
+        // Store raw in-house PDF count (1st column count)
+        const rawInhouseCount = roomsToUpdate.length;
+        rawInhouseCountRef.current = rawInhouseCount;
+        
+        // ห้องพักต่อ = raw in-house PDF count - expected departure PDF count
+        const inhouseCount = rawInhouseCount - departureRoomCount;
+        setInhouseRoomCount(Math.max(0, inhouseCount)); // Ensure non-negative
+        
+        // Save to Supabase (store both calculated count and raw count for persistence)
         try {
           await supabase
             .from('reports')
             .upsert({
               id: 'counts',
-              inhouse_room_count: roomsToUpdate.length,
+              inhouse_room_count: Math.max(0, inhouseCount),
+              raw_inhouse_count: rawInhouseCount, // Store raw count for recalculation
               updated_at: new Date().toISOString()
             }, { onConflict: 'id' });
         } catch (error) {
@@ -1823,6 +1864,7 @@ const Dashboard = () => {
       // Clear report counts
       setDepartureRoomCount(0);
       setInhouseRoomCount(0);
+      rawInhouseCountRef.current = 0; // Reset raw in-house count
       
       // Update report counts in Supabase
       try {
@@ -1832,6 +1874,7 @@ const Dashboard = () => {
             id: 'counts',
             departure_room_count: 0,
             inhouse_room_count: 0,
+            raw_inhouse_count: 0, // Reset raw count
             updated_at: new Date().toISOString()
           }, { onConflict: 'id' });
         
