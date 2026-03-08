@@ -775,7 +775,7 @@ const Dashboard = () => {
     { number: "606", type: "S", floor: 6, status: "vacant", maid: "", remark: "", cleanedToday: false },
     { number: "607", type: "S", floor: 6, status: "vacant", maid: "", remark: "", cleanedToday: false },
     { number: "608", type: "S", floor: 6, status: "long_stay", maid: "", remark: "", cleanedToday: false },
-    { number: "609", type: "S", floor: 6, status: "long_stay", maid: "", remark: "", cleanedToday: false },
+    { number: "609", type: "S", floor: 6, status: "vacant", maid: "", remark: "", cleanedToday: false },
     // Floor 5
     { number: "501", type: "D6", floor: 5, status: "vacant", maid: "", remark: "", cleanedToday: false },
     { number: "502", type: "D2", floor: 5, status: "vacant", maid: "", remark: "", cleanedToday: false },
@@ -1305,9 +1305,9 @@ const Dashboard = () => {
       // Update only rooms found in PDF (or first column for in-house) - set status based on report type
       // In-House PDF = blue (stay_clean)
       // Expected Departure PDF = yellow (will_depart_today)
-      // After Expected Departure PDF upload, ALWAYS assign gray-200 (long_stay) to long-stay rooms: 503, 608, 609
+      // After Expected Departure PDF upload, ALWAYS assign gray-200 (long_stay) to long-stay rooms: 503, 608
       // Calculate updated rooms first, then update state
-      const longStayRooms = ["503", "608", "609"];
+      const longStayRooms = ["503", "608"];
       const updatedRooms = rooms.map(r => {
         // Convert to string for comparison
         const roomNumStr = String(r.number);
