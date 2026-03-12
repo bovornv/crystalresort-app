@@ -26,6 +26,7 @@ const CommonAreaCard = ({ area, time, data, nickname, isFO }) => {
       "ห้องน้ำสวน": "toilet-cafe",
       "ลิฟต์": "lift",
       "ห้องทานข้าว": "dining-room",
+      "ห้องน้ำข้างห้องผ้าสต็อค": "toilet-next-to-linen-stock",
       "ห้องผ้าสต็อค": "linen-stock",
     };
     

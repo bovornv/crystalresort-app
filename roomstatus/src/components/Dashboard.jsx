@@ -2563,6 +2563,20 @@ const Dashboard = () => {
                   />
                 </td>
               </tr>
+              {/* ห้องน้ำข้างห้องผ้าสต็อค - เช้า only */}
+              <tr>
+                <td className="p-2 font-medium text-base sm:text-lg">ห้องน้ำข้างห้องผ้าสต็อค</td>
+                <td className="p-2">
+                  <CommonAreaCard
+                    area="ห้องน้ำข้างห้องผ้าสต็อค"
+                    time="เช้า"
+                    data={commonAreas.find(a => a.id === "toilet-next-to-linen-stock-morning")}
+                    nickname={nickname}
+                    isFO={nickname === "FO"}
+                  />
+                </td>
+                <td className="p-2">—</td>
+              </tr>
               {/* ห้องผ้าสต็อค - บ่าย only */}
               <tr>
                 <td className="p-2 font-medium text-base sm:text-lg">ห้องผ้าสต็อค</td>
