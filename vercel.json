@@ -36,6 +36,26 @@
       "status": 200
     },
     {
+      "src": "/airconstatus/index.html",
+      "dest": "/airconstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/airconstatus",
+      "dest": "/airconstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/airconstatus/",
+      "dest": "/airconstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/airconstatus/(.*)",
+      "dest": "/airconstatus/dist/$1",
+      "status": 200
+    },
+    {
       "src": "/favicon.svg",
       "dest": "/dashboard/favicon.svg",
       "status": 200
