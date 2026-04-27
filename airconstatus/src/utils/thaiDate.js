@@ -11,9 +11,9 @@ const THAI_MONTHS = [
   "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 ];
 
-const ENG_MONTHS_SHORT = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+const THAI_MONTHS_SHORT = [
+  "มค", "กพ", "มีค", "เมย", "พค", "มิย",
+  "กค", "สค", "กย", "ตค", "พย", "ธค",
 ];
 
 // e.g. "วันจันทร์ 27 เมษายน 2569"
@@ -32,13 +32,13 @@ export function formatTimeOfDay(date) {
   return `${hh}:${mm} น.`;
 }
 
-// e.g. "30 Mar 26" — DD Mon YY (last 2 digits of Buddhist year).
+// e.g. "30 มีค 69" — DD <Thai short month> YY (last 2 digits of Buddhist year).
 export function formatShortBuddhistDate(value) {
   if (!value) return "";
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
   const day = String(d.getDate()).padStart(2, "0");
-  const mon = ENG_MONTHS_SHORT[d.getMonth()];
+  const mon = THAI_MONTHS_SHORT[d.getMonth()];
   const buddhistYear = d.getFullYear() + 543;
   const yy = String(buddhistYear).slice(-2);
   return `${day} ${mon} ${yy}`;

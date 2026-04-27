@@ -4,6 +4,7 @@ import "../shared/theme.css";
 import "../shared/shared.css";
 import AirconRoomBox from "./AirconRoomBox";
 import AirconEditModal from "./AirconEditModal";
+import LoginModal from "./LoginModal";
 import { FLOORS, getRoomUnits } from "../utils/rooms";
 import { formatThaiBuddhistDate, formatTimeOfDay } from "../utils/thaiDate";
 import {
@@ -27,6 +28,13 @@ const AirconDashboard = () => {
     typeof window !== "undefined" &&
       localStorage.getItem("crystal_roomstatus_auth") === "true"
   );
+  const [nickname, setNickname] = useState(
+    typeof window !== "undefined"
+      ? localStorage.getItem("crystal_roomstatus_name") || ""
+      : ""
+  );
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const reloadDebounce = useRef(null);
 
   // Initial load + realtime subscription.
@@ -60,6 +68,7 @@ const AirconDashboard = () => {
   useEffect(() => {
     const handler = () => {
       setIsLoggedIn(localStorage.getItem("crystal_roomstatus_auth") === "true");
+      setNickname(localStorage.getItem("crystal_roomstatus_name") || "");
     };
     window.addEventListener("focus", handler);
     document.addEventListener("visibilitychange", handler);
@@ -68,6 +77,35 @@ const AirconDashboard = () => {
       document.removeEventListener("visibilitychange", handler);
     };
   }, []);
+
+  // Close the user dropdown when clicking outside it.
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const handler = (e) => {
+      if (!e.target.closest(".aircon-user-menu-container")) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showUserMenu]);
+
+  const handleLogin = (name) => {
+    const trimmed = name.trim();
+    localStorage.setItem("crystal_roomstatus_auth", "true");
+    localStorage.setItem("crystal_roomstatus_name", trimmed);
+    localStorage.setItem("crystal_nickname", trimmed);
+    // Reload so the Supabase client (which gates on the auth flag at module load)
+    // initializes with real credentials instead of the no-op mock.
+    window.location.reload();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("crystal_roomstatus_auth");
+    localStorage.removeItem("crystal_roomstatus_name");
+    localStorage.removeItem("crystal_nickname");
+    window.location.reload();
+  };
 
   const refreshStatus = async () => {
     const map = await fetchAllAirconStatus();
@@ -78,22 +116,43 @@ const AirconDashboard = () => {
     <div className="min-h-screen flex flex-col bg-[#F6F8FA]">
       {/* Page Title Bar */}
       <div className="bg-slate-700 text-white py-4 px-6 mb-6 relative">
-        {/* Login pill / current user — links to roomstatus to log in */}
-        <div className="absolute top-4 right-6">
+        {/* Login pill / current user — opens login modal or user dropdown */}
+        <div className="absolute top-4 right-6 aircon-user-menu-container">
           {isLoggedIn ? (
-            <a
-              href="/roomstatus/"
-              className="px-4 py-2 bg-[#15803D] text-white rounded-full shadow-md hover:bg-[#166534] transition-colors text-sm font-medium inline-block"
-            >
-              👤 ผู้ใช้งาน
-            </a>
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="px-4 py-2 bg-[#15803D] text-white rounded-full shadow-md hover:bg-[#166534] transition-colors text-sm font-medium flex items-center gap-2"
+              >
+                <span>👤</span>
+                <span>{nickname || "ผู้ใช้งาน"}</span>
+                <span className="text-xs">▼</span>
+              </button>
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">
+                      <div className="font-medium">{nickname || "ผู้ใช้งาน"}</div>
+                      <div className="text-xs text-gray-500">ผู้ใช้ที่เข้าสู่ระบบ</div>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+                    >
+                      <span>🚪</span>
+                      <span>ออกจากระบบ</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <a
-              href="/roomstatus/"
-              className="px-4 py-2 bg-[#15803D] text-white rounded-full shadow-md hover:bg-[#166534] transition-colors text-sm font-medium inline-block"
+            <button
+              onClick={() => setShowLoginModal(true)}
+              className="px-4 py-2 bg-[#15803D] text-white rounded-full shadow-md hover:bg-[#166534] transition-colors text-sm font-medium"
             >
               เข้าสู่ระบบ
-            </a>
+            </button>
           )}
         </div>
 
@@ -208,12 +267,16 @@ const AirconDashboard = () => {
           }
           canEdit={isLoggedIn}
           onClose={() => setEditing(null)}
-          onLoginRequired={() => {
-            window.location.href = "/roomstatus/";
-          }}
+          onLoginRequired={() => setShowLoginModal(true)}
           onSaved={refreshStatus}
         />
       )}
+
+      <LoginModal
+        open={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onLogin={handleLogin}
+      />
     </div>
   );
 };
