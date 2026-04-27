@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "cd roomstatus && npm install && npm run build"
+    "build": "cd roomstatus && npm install && npm run build && cd ../airconstatus && npm install && npm run build"
   }
 }
