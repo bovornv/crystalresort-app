@@ -2707,6 +2707,36 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Maintenance circle-color legend — explains the dot shown on rooms with pending แจ้งช่าง items */}
+      <div className="mt-6 bg-white rounded-2xl p-4 shadow-md max-w-md mx-auto">
+        <h3 className="font-semibold text-center text-[#15803D] mb-3">
+          ความหมายของสีวงกลม
+        </h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex items-start gap-3">
+            <div
+              className="w-3.5 h-3.5 rounded-full ring-2 ring-white shadow flex-shrink-0 mt-1"
+              style={{ backgroundColor: "#FCD34D" }}
+            />
+            <span><strong>สีเหลือง</strong> — ไม่ด่วน: แจ้งซ่อมไว้ ไม่ต้องรีบ ทำได้เมื่อสะดวก</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <div
+              className="w-3.5 h-3.5 rounded-full ring-2 ring-white shadow flex-shrink-0 mt-1"
+              style={{ backgroundColor: "#FB923C" }}
+            />
+            <span><strong>สีส้ม</strong> — ด่วน: ควรเข้าซ่อมภายในวันนี้</span>
+          </div>
+          <div className="flex items-start gap-3">
+            <div
+              className="w-3.5 h-3.5 rounded-full ring-2 ring-white shadow flex-shrink-0 mt-1"
+              style={{ backgroundColor: "#B91C1C" }}
+            />
+            <span><strong>สีแดงเข้ม</strong> — ด่วนสุด: ต้องเข้าซ่อมโดยเร็วที่สุด แขกได้รับผลกระทบ</span>
+          </div>
+        </div>
+      </div>
       </div>
       <Footer />
     </div>

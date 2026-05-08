@@ -19,13 +19,7 @@ const RoomCard = ({
   onMaintenanceChanged,
 }) => {
   const [showPopup, setShowPopup] = useState(false);
-  const [remark, setRemark] = useState(room.remark || "");
   const closeBtnRef = useRef(null);
-
-  // Sync remark when room prop changes
-  useEffect(() => {
-    setRemark(room.remark || "");
-  }, [room.remark]);
 
   // ESC closes the modal + body scroll lock + focus the close button on open.
   useEffect(() => {
@@ -101,21 +95,6 @@ const RoomCard = ({
     }
   };
 
-  const handleSaveRemark = async () => {
-    if (!isLoggedIn || !currentNickname) {
-      onLoginRequired();
-      return;
-    }
-
-    const roomUpdates = { remark };
-
-    if (updateRoomImmediately) {
-      await updateRoomImmediately(room.number, roomUpdates);
-    }
-
-    setShowPopup(false);
-  };
-
   const closePopup = () => {
     setShowPopup(false);
     onMaintenanceChanged?.();
@@ -131,7 +110,7 @@ const RoomCard = ({
     >
       {showMaintenanceBadge && (
         <span
-          className="absolute top-1 right-1 w-2 h-2 rounded-full ring-1 ring-white"
+          className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full ring-2 ring-white"
           style={{ backgroundColor: URGENCY_BADGE_BG[maintenanceInfo.highestUrgency] || "#B91C1C" }}
           title={`มีรายการแจ้งช่าง ${maintenanceInfo.count} รายการ`}
           aria-label={`มีรายการแจ้งช่าง ${maintenanceInfo.count} รายการ`}
@@ -139,18 +118,11 @@ const RoomCard = ({
       )}
 
       <div className="flex flex-col items-start">
-        <div className="flex justify-between items-start w-full">
-          <div>
-            <p className="font-bold text-lg sm:text-xl">{room.number}</p>
-            <p className="text-xs sm:text-sm text-gray-700">{room.type}</p>
-            {room.maid && (
-              <p className="text-base sm:text-lg font-semibold text-gray-800 mt-1 block">{room.maid}</p>
-            )}
-          </div>
-          {room.remark && (
-            <div className="h-3 w-3 sm:h-4 sm:w-4 rounded-full bg-red-500 mt-1 flex-shrink-0"></div>
-          )}
-        </div>
+        <p className="font-bold text-lg sm:text-xl">{room.number}</p>
+        <p className="text-xs sm:text-sm text-gray-700">{room.type}</p>
+        {room.maid && (
+          <p className="text-base sm:text-lg font-semibold text-gray-800 mt-1 block">{room.maid}</p>
+        )}
       </div>
 
       {/* Popup */}
@@ -184,7 +156,7 @@ const RoomCard = ({
                     id={`room-modal-title-${room.number}`}
                     className="text-xl sm:text-2xl font-bold text-[#15803D]"
                   >
-                    แจ้งช่าง — ห้อง {room.number}
+                    ห้อง {room.number}
                   </h2>
                 </div>
                 <button
@@ -201,22 +173,10 @@ const RoomCard = ({
                 </button>
               </div>
 
-              {/* Body (scrollable) */}
+              {/* Body (scrollable) — status section on top, maintenance section at the bottom */}
               <div className="overflow-y-auto p-5 space-y-6">
-                {/* Maintenance section */}
-                <section aria-labelledby={`maint-section-${room.number}`}>
-                  <h3 id={`maint-section-${room.number}`} className="sr-only">รายการแจ้งช่าง</h3>
-                  <MaintenanceTable
-                    roomNumber={String(room.number)}
-                    currentNickname={currentNickname}
-                    isLoggedIn={isLoggedIn}
-                    onLoginRequired={onLoginRequired}
-                    onChange={onMaintenanceChanged}
-                  />
-                </section>
-
-                {/* Status / cleaning section — preserved from original modal */}
-                <section className="border-t border-gray-200 pt-5">
+                {/* Status / cleaning section */}
+                <section>
                   <div className="max-w-md mx-auto">
                     {!isFO && (
                       <>
@@ -251,20 +211,12 @@ const RoomCard = ({
                           >
                             เลือกห้องนี้
                           </button>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={closePopup}
-                              className="bg-gray-300 text-black px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-gray-400 transition-colors"
-                            >
-                              ปิด
-                            </button>
-                            <button
-                              onClick={handleSaveRemark}
-                              className="bg-[#15803D] text-white px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-[#166534] transition-colors"
-                            >
-                              บันทึก
-                            </button>
-                          </div>
+                          <button
+                            onClick={closePopup}
+                            className="bg-gray-300 text-black px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-gray-400 transition-colors"
+                          >
+                            ปิด
+                          </button>
                         </div>
                       </>
                     )}
@@ -328,29 +280,30 @@ const RoomCard = ({
                           >
                             ปิด
                           </button>
-                          <button
-                            onClick={handleSaveRemark}
-                            className="bg-[#15803D] text-white px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-[#166534] transition-colors"
-                          >
-                            บันทึก
-                          </button>
                         </div>
                       </>
                     )}
-
-                    <div className="mt-4">
-                      <label className="block text-sm font-semibold mb-2 text-gray-700">
-                        หมายเหตุห้อง
-                      </label>
-                      <textarea
-                        rows="3"
-                        value={remark}
-                        onChange={(e) => setRemark(e.target.value)}
-                        className="w-full border-2 border-gray-300 rounded-lg p-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[#15803D] resize-none"
-                        placeholder="เพิ่มหมายเหตุ..."
-                      />
-                    </div>
                   </div>
+                </section>
+
+                {/* Maintenance section — at the bottom */}
+                <section
+                  className="border-t border-gray-200 pt-5"
+                  aria-labelledby={`maint-section-${room.number}`}
+                >
+                  <h3
+                    id={`maint-section-${room.number}`}
+                    className="text-lg sm:text-xl font-bold text-[#15803D] mb-3"
+                  >
+                    แจ้งช่าง
+                  </h3>
+                  <MaintenanceTable
+                    roomNumber={String(room.number)}
+                    currentNickname={currentNickname}
+                    isLoggedIn={isLoggedIn}
+                    onLoginRequired={onLoginRequired}
+                    onChange={onMaintenanceChanged}
+                  />
                 </section>
               </div>
             </motion.div>
