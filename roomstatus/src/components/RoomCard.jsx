@@ -1,14 +1,45 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import MaintenanceTable from "./MaintenanceTable";
 
-const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, currentNickname, currentDate }) => {
+const URGENCY_BADGE_BG = {
+  not_urgent: "#FCD34D",
+  urgent: "#FB923C",
+  most_urgent: "#B91C1C",
+};
+
+const RoomCard = ({
+  room,
+  updateRoomImmediately,
+  isLoggedIn,
+  onLoginRequired,
+  currentNickname,
+  currentDate,
+  maintenanceInfo,
+  onMaintenanceChanged,
+}) => {
   const [showPopup, setShowPopup] = useState(false);
   const [remark, setRemark] = useState(room.remark || "");
+  const closeBtnRef = useRef(null);
 
   // Sync remark when room prop changes
   useEffect(() => {
     setRemark(room.remark || "");
   }, [room.remark]);
+
+  // ESC closes the modal + body scroll lock + focus the close button on open.
+  useEffect(() => {
+    if (!showPopup) return;
+    const onKey = (e) => { if (e.key === "Escape") setShowPopup(false); };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeBtnRef.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showPopup]);
 
   const colorMap = {
     cleaned: "bg-green-200", // ห้องเสร็จแล้ว (ว่าง)
@@ -23,7 +54,6 @@ const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, cu
   };
 
   const isFO = currentNickname === "FO";
-  // Use status-based color, purple for unoccupied_3d status
   const roomBg = colorMap[room.status] || "bg-white";
   const borderColor = room.border === "red" ? "border-2 border-red-600" : "border border-black";
 
@@ -33,21 +63,18 @@ const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, cu
       return;
     }
 
-    const wasCleaned = (status === "cleaned" || status === "cleaned_stay") && 
+    const wasCleaned = (status === "cleaned" || status === "cleaned_stay") &&
                         room.status !== "cleaned" && room.status !== "cleaned_stay";
-    
-    // Track if room was purple before being cleaned (for scoring purposes)
+
     const wasPurpleBeforeCleaned = wasCleaned && room.status === "unoccupied_3d";
-    
+
     const roomUpdates = {
       status,
       border: "black",
       maid: isFO ? (room.maid || "") : ((status === "cleaned" || status === "cleaned_stay") ? currentNickname.trim() : (room.maid || "")),
       cleanedToday: wasCleaned ? true : (room.cleanedToday || false),
     };
-    
-    // Only add wasPurpleBeforeCleaned if it's true (for scoring)
-    // If false or not applicable, don't include it (will be removed from existing rooms)
+
     if (wasPurpleBeforeCleaned) {
       roomUpdates.wasPurpleBeforeCleaned = true;
     }
@@ -63,14 +90,10 @@ const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, cu
       return;
     }
 
-    // Action 6: When "เลือกห้องนี้" is pressed:
-    // - Change border from black to red (or red to black if already red)
-    // - Show maid nickname below room type
-    // - Everyone will see the change immediately via real-time sync
     const newBorder = room.border === "red" ? "black" : "red";
     const roomUpdates = {
       border: newBorder,
-      maid: currentNickname.trim(), // Show nickname below room type
+      maid: currentNickname.trim(),
     };
 
     if (updateRoomImmediately) {
@@ -84,22 +107,37 @@ const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, cu
       return;
     }
 
-    const roomUpdates = {
-      remark,
-    };
+    const roomUpdates = { remark };
 
     if (updateRoomImmediately) {
       await updateRoomImmediately(room.number, roomUpdates);
     }
-    
+
     setShowPopup(false);
   };
+
+  const closePopup = () => {
+    setShowPopup(false);
+    onMaintenanceChanged?.();
+  };
+
+  // Maintenance badge: top-right dot, color reflects highest urgency.
+  const showMaintenanceBadge = maintenanceInfo && maintenanceInfo.count > 0;
 
   return (
     <div
       onClick={() => setShowPopup(true)}
-      className={`rounded-lg p-2 ${roomBg} ${borderColor} cursor-pointer transition min-w-[80px]`}
+      className={`relative rounded-lg p-2 ${roomBg} ${borderColor} cursor-pointer transition min-w-[80px]`}
     >
+      {showMaintenanceBadge && (
+        <span
+          className="absolute top-1 right-1 w-2 h-2 rounded-full ring-1 ring-white"
+          style={{ backgroundColor: URGENCY_BADGE_BG[maintenanceInfo.highestUrgency] || "#B91C1C" }}
+          title={`มีรายการแจ้งช่าง ${maintenanceInfo.count} รายการ`}
+          aria-label={`มีรายการแจ้งช่าง ${maintenanceInfo.count} รายการ`}
+        />
+      )}
+
       <div className="flex flex-col items-start">
         <div className="flex justify-between items-start w-full">
           <div>
@@ -119,163 +157,201 @@ const RoomCard = ({ room, updateRoomImmediately, isLoggedIn, onLoginRequired, cu
       <AnimatePresence>
         {showPopup && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            className="fixed inset-0 z-50 flex items-stretch md:items-center justify-center bg-black/50 md:p-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={(e) => {
               if (e.target === e.currentTarget) {
-                setShowPopup(false);
+                closePopup();
               }
             }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`room-modal-title-${room.number}`}
           >
             <motion.div
-              className="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl"
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
+              className="bg-white w-full md:max-w-4xl md:rounded-xl shadow-xl flex flex-col max-h-screen md:max-h-[90vh]"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-center text-[#15803D]">
-                ห้อง {room.number}
-              </h2>
+              {/* Header */}
+              <div className="flex items-start justify-between p-5 border-b border-gray-200">
+                <div className="flex-1">
+                  <h2
+                    id={`room-modal-title-${room.number}`}
+                    className="text-xl sm:text-2xl font-bold text-[#15803D]"
+                  >
+                    แจ้งช่าง — ห้อง {room.number}
+                  </h2>
+                </div>
+                <button
+                  ref={closeBtnRef}
+                  type="button"
+                  onClick={closePopup}
+                  aria-label="ปิด"
+                  className="ml-3 w-9 h-9 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#15803D]"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                       strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
 
-              {/* Non-FO user */}
-              {!isFO && (
-                <>
-                  {/* Show only one button based on room color */}
-                  {/* If room is NOT blue (stay_clean) and NOT light gray (long_stay), show green button */}
-                  {room.status !== "stay_clean" && room.status !== "long_stay" && (
-                    <div className="flex justify-center mb-4">
-                      <button
-                        className="w-full bg-green-200 hover:bg-green-300 text-black py-6 rounded-lg text-xl sm:text-2xl font-bold transition-colors"
-                        onClick={() => handleStatusChange("cleaned")}
-                      >
-                        ห้องเสร็จแล้ว (ว่าง)
-                      </button>
-                    </div>
-                  )}
-                  {/* If room IS blue or light gray, show cyan button */}
-                  {(room.status === "stay_clean" || room.status === "long_stay") && (
-                    <div className="flex justify-center mb-4">
-                      <button
-                        className="w-full bg-cyan-200 hover:bg-cyan-300 text-black py-6 rounded-lg text-xl sm:text-2xl font-bold transition-colors"
-                        onClick={() => handleStatusChange("cleaned_stay")}
-                      >
-                        ห้องเสร็จแล้ว (พักต่อ)
-                      </button>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center mb-3">
-                    <button
-                      onClick={handleSelectRoom}
-                      className={`px-6 py-3 rounded-lg text-lg sm:text-xl font-semibold transition-colors ${
-                        room.border === "red" 
-                          ? "bg-[#15803D] text-white hover:bg-[#166534]" 
-                          : "bg-green-200 text-black hover:bg-green-300"
-                      }`}
-                    >
-                      เลือกห้องนี้
-                    </button>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setShowPopup(false)}
-                        className="bg-gray-300 text-black px-6 py-3 rounded-lg text-lg sm:text-xl font-semibold hover:bg-gray-400 transition-colors"
-                      >
-                        ปิด
-                      </button>
-                      <button
-                        onClick={handleSaveRemark}
-                        className="bg-[#15803D] text-white px-6 py-3 rounded-lg text-lg sm:text-xl font-semibold hover:bg-[#166534] transition-colors"
-                      >
-                        บันทึก
-                      </button>
+              {/* Body (scrollable) */}
+              <div className="overflow-y-auto p-5 space-y-6">
+                {/* Maintenance section */}
+                <section aria-labelledby={`maint-section-${room.number}`}>
+                  <h3 id={`maint-section-${room.number}`} className="sr-only">รายการแจ้งช่าง</h3>
+                  <MaintenanceTable
+                    roomNumber={String(room.number)}
+                    currentNickname={currentNickname}
+                    isLoggedIn={isLoggedIn}
+                    onLoginRequired={onLoginRequired}
+                    onChange={onMaintenanceChanged}
+                  />
+                </section>
+
+                {/* Status / cleaning section — preserved from original modal */}
+                <section className="border-t border-gray-200 pt-5">
+                  <div className="max-w-md mx-auto">
+                    {!isFO && (
+                      <>
+                        {room.status !== "stay_clean" && room.status !== "long_stay" && (
+                          <div className="flex justify-center mb-4">
+                            <button
+                              className="w-full bg-green-200 hover:bg-green-300 text-black py-5 rounded-lg text-xl font-bold transition-colors"
+                              onClick={() => handleStatusChange("cleaned")}
+                            >
+                              ห้องเสร็จแล้ว (ว่าง)
+                            </button>
+                          </div>
+                        )}
+                        {(room.status === "stay_clean" || room.status === "long_stay") && (
+                          <div className="flex justify-center mb-4">
+                            <button
+                              className="w-full bg-cyan-200 hover:bg-cyan-300 text-black py-5 rounded-lg text-xl font-bold transition-colors"
+                              onClick={() => handleStatusChange("cleaned_stay")}
+                            >
+                              ห้องเสร็จแล้ว (พักต่อ)
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center gap-2 flex-wrap">
+                          <button
+                            onClick={handleSelectRoom}
+                            className={`px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold transition-colors ${
+                              room.border === "red"
+                                ? "bg-[#15803D] text-white hover:bg-[#166534]"
+                                : "bg-green-200 text-black hover:bg-green-300"
+                            }`}
+                          >
+                            เลือกห้องนี้
+                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={closePopup}
+                              className="bg-gray-300 text-black px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-gray-400 transition-colors"
+                            >
+                              ปิด
+                            </button>
+                            <button
+                              onClick={handleSaveRemark}
+                              className="bg-[#15803D] text-white px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-[#166534] transition-colors"
+                            >
+                              บันทึก
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {isFO && (
+                      <>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                          <button
+                            onClick={() => handleStatusChange("cleaned")}
+                            className="bg-green-200 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-green-300 transition-colors"
+                          >
+                            ห้องเสร็จแล้ว (ว่าง)
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("cleaned_stay")}
+                            className="bg-cyan-200 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-cyan-300 transition-colors"
+                          >
+                            ห้องเสร็จแล้ว (พักต่อ)
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("closed")}
+                            className="bg-gray-500 text-white py-4 rounded-lg text-lg sm:text-xl font-bold hover:bg-gray-600 transition-colors"
+                          >
+                            ปิดห้อง
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("checked_out")}
+                            className="bg-red-300 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-red-400 transition-colors"
+                          >
+                            ออกแล้ว
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("vacant")}
+                            className="bg-white border-2 border-gray-300 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-gray-50 transition-colors"
+                          >
+                            ว่าง
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("stay_clean")}
+                            className="bg-blue-200 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-blue-300 transition-colors"
+                          >
+                            พักต่อ
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("will_depart_today")}
+                            className="bg-yellow-200 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-yellow-300 transition-colors"
+                          >
+                            จะออกวันนี้
+                          </button>
+                          <button
+                            onClick={() => handleStatusChange("long_stay")}
+                            className="bg-gray-200 py-4 rounded-lg text-black text-lg sm:text-xl font-bold hover:bg-gray-300 transition-colors"
+                          >
+                            รายเดือน
+                          </button>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={closePopup}
+                            className="bg-gray-300 text-black px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-gray-400 transition-colors"
+                          >
+                            ปิด
+                          </button>
+                          <button
+                            onClick={handleSaveRemark}
+                            className="bg-[#15803D] text-white px-5 py-2.5 rounded-lg text-base sm:text-lg font-semibold hover:bg-[#166534] transition-colors"
+                          >
+                            บันทึก
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="mt-4">
+                      <label className="block text-sm font-semibold mb-2 text-gray-700">
+                        หมายเหตุห้อง
+                      </label>
+                      <textarea
+                        rows="3"
+                        value={remark}
+                        onChange={(e) => setRemark(e.target.value)}
+                        className="w-full border-2 border-gray-300 rounded-lg p-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[#15803D] resize-none"
+                        placeholder="เพิ่มหมายเหตุ..."
+                      />
                     </div>
                   </div>
-                </>
-              )}
-
-              {/* FO user */}
-              {isFO && (
-                <>
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    <button
-                      onClick={() => handleStatusChange("cleaned")}
-                      className="bg-green-200 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-green-300 transition-colors"
-                    >
-                      ห้องเสร็จแล้ว (ว่าง)
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("cleaned_stay")}
-                      className="bg-cyan-200 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-cyan-300 transition-colors"
-                    >
-                      ห้องเสร็จแล้ว (พักต่อ)
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("closed")}
-                      className="bg-gray-500 text-white py-4 rounded-lg text-xl sm:text-2xl font-bold hover:bg-gray-600 transition-colors"
-                    >
-                      ปิดห้อง
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("checked_out")}
-                      className="bg-red-300 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-red-400 transition-colors"
-                    >
-                      ออกแล้ว
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("vacant")}
-                      className="bg-white border-2 border-gray-300 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-gray-50 transition-colors"
-                    >
-                      ว่าง
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("stay_clean")}
-                      className="bg-blue-200 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-blue-300 transition-colors"
-                    >
-                      พักต่อ
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("will_depart_today")}
-                      className="bg-yellow-200 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-yellow-300 transition-colors"
-                    >
-                      จะออกวันนี้
-                    </button>
-                    <button
-                      onClick={() => handleStatusChange("long_stay")}
-                      className="bg-gray-200 py-4 rounded-lg text-black text-xl sm:text-2xl font-bold hover:bg-gray-300 transition-colors"
-                    >
-                      รายเดือน
-                    </button>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setShowPopup(false)}
-                      className="bg-gray-300 text-black px-6 py-3 rounded-lg text-xl sm:text-2xl font-semibold hover:bg-gray-400 transition-colors"
-                    >
-                      ปิด
-                    </button>
-                    <button
-                      onClick={handleSaveRemark}
-                      className="bg-[#15803D] text-white px-6 py-3 rounded-lg text-xl sm:text-2xl font-semibold hover:bg-[#166534] transition-colors"
-                    >
-                      บันทึก
-                    </button>
-                  </div>
-                </>
-              )}
-
-              <div className="mt-4">
-                <label className="block text-sm font-semibold mb-2 text-gray-700">
-                  หมายเหตุ
-                </label>
-                <textarea
-                  rows="3"
-                  value={remark}
-                  onChange={(e) => setRemark(e.target.value)}
-                  className="w-full border-2 border-gray-300 rounded-lg p-2 text-sm text-black focus:outline-none focus:ring-2 focus:ring-[#15803D] resize-none"
-                  placeholder="เพิ่มหมายเหตุ..."
-                />
+                </section>
               </div>
             </motion.div>
           </motion.div>
