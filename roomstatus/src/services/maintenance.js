@@ -59,20 +59,23 @@ export async function fetchPendingByRoom(roomNumber) {
   return data || [];
 }
 
-// Returns Map<room_number, { count, highestUrgency }> for the grid badges.
+// Returns Map<room_number, { count, byUrgency: { most_urgent, urgent, not_urgent } }>
+// — used by the grid to render a sorted stack of urgency dots per room.
 export async function fetchPendingCounts() {
   const { data, error } = await supabase
     .from(TABLE)
     .select('room_number, urgency')
     .eq('status', 'pending');
   if (error) throw error;
-  const rank = { not_urgent: 1, urgent: 2, most_urgent: 3 };
   const map = new Map();
   for (const row of data || []) {
-    const cur = map.get(row.room_number) || { count: 0, highestUrgency: 'not_urgent' };
+    const cur = map.get(row.room_number) || {
+      count: 0,
+      byUrgency: { most_urgent: 0, urgent: 0, not_urgent: 0 },
+    };
     cur.count += 1;
-    if ((rank[row.urgency] || 0) > (rank[cur.highestUrgency] || 0)) {
-      cur.highestUrgency = row.urgency;
+    if (row.urgency in cur.byUrgency) {
+      cur.byUrgency[row.urgency] += 1;
     }
     map.set(row.room_number, cur);
   }
