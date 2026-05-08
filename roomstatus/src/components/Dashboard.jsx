@@ -906,7 +906,8 @@ const Dashboard = () => {
   // Start with empty array, Supabase will populate it via realtime subscription
   const [rooms, setRooms] = useState([]);
 
-  // Per-room pending maintenance summary: Map<room_number, { count, highestUrgency }>
+  // Per-room pending maintenance summary: Map<room_number, { count, byUrgency }>
+  // — RoomCard derives a sorted dot stack from byUrgency.
   const [maintenanceCounts, setMaintenanceCounts] = useState(new Map());
 
   const refreshMaintenanceCounts = async () => {

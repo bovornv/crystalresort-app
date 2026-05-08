@@ -8,6 +8,22 @@ const URGENCY_BADGE_BG = {
   most_urgent: "#B91C1C",
 };
 
+// Render order for the per-room dot stack: most urgent on top.
+const DOT_STACK_LIMIT = 4;
+const URGENCY_RENDER_ORDER = ["most_urgent", "urgent", "not_urgent"];
+
+// Build a sorted list of up to 4 urgency keys from per-urgency counts.
+// Example: { most_urgent: 1, urgent: 2, not_urgent: 3 } → ["most_urgent","urgent","urgent","not_urgent"]
+function buildDotStack(byUrgency) {
+  if (!byUrgency) return [];
+  const dots = [];
+  for (const key of URGENCY_RENDER_ORDER) {
+    const n = byUrgency[key] || 0;
+    for (let i = 0; i < n; i++) dots.push(key);
+  }
+  return dots.slice(0, DOT_STACK_LIMIT);
+}
+
 const RoomCard = ({
   room,
   updateRoomImmediately,
@@ -100,21 +116,32 @@ const RoomCard = ({
     onMaintenanceChanged?.();
   };
 
-  // Maintenance badge: top-right dot, color reflects highest urgency.
-  const showMaintenanceBadge = maintenanceInfo && maintenanceInfo.count > 0;
+  // Maintenance badge: vertical stack of one dot per pending item, sorted
+  // most-urgent first, capped at DOT_STACK_LIMIT. Tooltip shows TOTAL count
+  // (including any items beyond the cap).
+  const dotStack = buildDotStack(maintenanceInfo?.byUrgency);
+  const totalPending = maintenanceInfo?.count || 0;
 
   return (
     <div
       onClick={() => setShowPopup(true)}
       className={`relative rounded-lg p-2 ${roomBg} ${borderColor} cursor-pointer transition min-w-[80px]`}
     >
-      {showMaintenanceBadge && (
-        <span
-          className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full ring-2 ring-white"
-          style={{ backgroundColor: URGENCY_BADGE_BG[maintenanceInfo.highestUrgency] || "#B91C1C" }}
-          title={`มีรายการแจ้งช่าง ${maintenanceInfo.count} รายการ`}
-          aria-label={`มีรายการแจ้งช่าง ${maintenanceInfo.count} รายการ`}
-        />
+      {dotStack.length > 0 && (
+        <div
+          className="absolute top-1 right-1 flex flex-col gap-0.5"
+          title={`มีรายการแจ้งช่าง ${totalPending} รายการ`}
+          aria-label={`มีรายการแจ้งช่าง ${totalPending} รายการ`}
+        >
+          {dotStack.map((urg, i) => (
+            <span
+              key={i}
+              className="w-3 h-3 rounded-full ring-2 ring-white"
+              style={{ backgroundColor: URGENCY_BADGE_BG[urg] }}
+              aria-hidden="true"
+            />
+          ))}
+        </div>
       )}
 
       <div className="flex flex-col items-start">
@@ -149,22 +176,22 @@ const RoomCard = ({
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
-              <div className="flex items-start justify-between p-5 border-b border-gray-200">
-                <div className="flex-1">
-                  <h2
-                    id={`room-modal-title-${room.number}`}
-                    className="text-xl sm:text-2xl font-bold text-[#15803D]"
-                  >
-                    ห้อง {room.number}
-                  </h2>
-                </div>
+              {/* Header — invisible spacer mirrors the close button so the title
+                  stays centered relative to the full modal width. */}
+              <div className="flex items-center gap-3 p-5 border-b border-gray-200">
+                <div className="w-9 h-9 flex-shrink-0" aria-hidden="true" />
+                <h2
+                  id={`room-modal-title-${room.number}`}
+                  className="flex-1 min-w-0 text-center text-2xl sm:text-3xl font-bold text-[#15803D]"
+                >
+                  ห้อง {room.number}
+                </h2>
                 <button
                   ref={closeBtnRef}
                   type="button"
                   onClick={closePopup}
                   aria-label="ปิด"
-                  className="ml-3 w-9 h-9 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#15803D]"
+                  className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#15803D]"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
                        strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5" aria-hidden="true">
