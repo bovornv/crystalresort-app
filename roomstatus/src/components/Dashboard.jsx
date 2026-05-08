@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import RoomCard from "./RoomCard";
 import CommonAreaCard from "./CommonAreaCard";
 import Footer from "../shared/Footer";
@@ -6,6 +7,7 @@ import "../shared/theme.css";
 import "../shared/shared.css";
 import * as pdfjsLib from "pdfjs-dist";
 import { supabase } from "../services/supabase";
+import { fetchPendingCounts } from "../services/maintenance";
 
 // Configure PDF.js worker for Vite - use worker from node_modules to ensure version match
 // Use jsDelivr CDN which is more reliable than unpkg/cdnjs for worker files
@@ -903,6 +905,23 @@ const Dashboard = () => {
   // Rooms state - Supabase is the single source of truth
   // Start with empty array, Supabase will populate it via realtime subscription
   const [rooms, setRooms] = useState([]);
+
+  // Per-room pending maintenance summary: Map<room_number, { count, highestUrgency }>
+  const [maintenanceCounts, setMaintenanceCounts] = useState(new Map());
+
+  const refreshMaintenanceCounts = async () => {
+    try {
+      const map = await fetchPendingCounts();
+      setMaintenanceCounts(map);
+    } catch (err) {
+      console.error("Error loading maintenance counts:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    refreshMaintenanceCounts();
+  }, [isLoggedIn]);
 
   // Initialize Supabase sync - Supabase is the single source of truth
   useEffect(() => {
@@ -2183,6 +2202,14 @@ const Dashboard = () => {
             <span className="text-white text-lg">:</span>
             <p className="text-white text-lg">{timeString}</p>
           </div>
+          <div className="mt-2">
+            <Link
+              to="/maintenance-history"
+              className="inline-block px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded text-sm transition-colors"
+            >
+              📋 ประวัติแจ้งซ่อมทั้งหมด
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -2423,14 +2450,16 @@ const Dashboard = () => {
             <div className="flex-1 overflow-x-auto">
               <div className="flex gap-1.5 min-w-max">
                 {roomsOnFloor.map(r => (
-                  <RoomCard 
-                    key={r.number} 
-                    room={r} 
+                  <RoomCard
+                    key={r.number}
+                    room={r}
                     updateRoomImmediately={updateRoomImmediately}
                     isLoggedIn={isLoggedIn}
                     onLoginRequired={() => setShowLoginModal(true)}
                     currentNickname={nickname}
                     currentDate={remarkDateString}
+                    maintenanceInfo={maintenanceCounts.get(String(r.number))}
+                    onMaintenanceChanged={refreshMaintenanceCounts}
                   />
                 ))}
               </div>
