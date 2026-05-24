@@ -56,6 +56,26 @@
       "status": 200
     },
     {
+      "src": "/bedstatus/index.html",
+      "dest": "/bedstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/bedstatus",
+      "dest": "/bedstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/bedstatus/",
+      "dest": "/bedstatus/dist/index.html",
+      "status": 200
+    },
+    {
+      "src": "/bedstatus/(.*)",
+      "dest": "/bedstatus/dist/$1",
+      "status": 200
+    },
+    {
       "src": "/favicon.svg",
       "dest": "/dashboard/favicon.svg",
       "status": 200
