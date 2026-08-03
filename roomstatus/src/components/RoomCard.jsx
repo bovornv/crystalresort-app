@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import MaintenanceTable from "./MaintenanceTable";
 
 const URGENCY_BADGE_BG = {
@@ -153,29 +152,22 @@ const RoomCard = ({
       </div>
 
       {/* Popup */}
-      <AnimatePresence>
-        {showPopup && (
-          <motion.div
-            className="fixed inset-0 z-50 flex items-stretch md:items-center justify-center bg-black/50 md:p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                closePopup();
-              }
-            }}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`room-modal-title-${room.number}`}
+      {showPopup && (
+        <div
+          className="fixed inset-0 z-50 flex items-stretch md:items-center justify-center bg-black/50 md:p-4 transition-opacity duration-150 opacity-100"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closePopup();
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`room-modal-title-${room.number}`}
+        >
+          <div
+            className="bg-white w-full md:max-w-4xl md:rounded-xl shadow-xl flex flex-col max-h-screen md:max-h-[90vh] transition-all duration-150"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              className="bg-white w-full md:max-w-4xl md:rounded-xl shadow-xl flex flex-col max-h-screen md:max-h-[90vh]"
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
               {/* Header — invisible spacer mirrors the close button so the title
                   stays centered relative to the full modal width. */}
               <div className="flex items-center gap-3 p-5 border-b border-gray-200">
@@ -333,10 +325,9 @@ const RoomCard = ({
                   />
                 </section>
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
-      </AnimatePresence>
     </div>
   );
 };
