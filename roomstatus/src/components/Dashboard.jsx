@@ -813,8 +813,8 @@ const Dashboard = () => {
     { number: "418", type: "D2", floor: 4, status: "vacant", maid: "", remark: "", cleanedToday: false },
     // Floor 3
     { number: "301", type: "D6", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
-    { number: "302", type: "D5", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
-    { number: "303", type: "D5", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
+    { number: "302", type: "D2", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
+    { number: "303", type: "D2", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
     { number: "304", type: "D5", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
     { number: "305", type: "D5", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
     { number: "306", type: "D5", floor: 3, status: "vacant", maid: "", remark: "", cleanedToday: false },
