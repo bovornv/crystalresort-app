@@ -26,6 +26,9 @@ Crystal Resort and Cafe's staff tools, one Vercel project served at crystalresor
 - **Monthly rooms as of 6 Oct 2026: 503, 505, 608.** 505 added that day (`86675cb`; its row had
   been set `long_stay` by hand at 11:52); ลบข้อมูล fixed to keep them gray (`8cb592b`) — before,
   it reset every room to vacant despite its own confirm text.
+- **Aurasea mirrors this:** Crystal Resort's Suite monthly-room setting in Aurasea
+  (`room_type_long_stay`, ตั้งค่า → ประเภทห้อง) is 3 rooms at ฿3,000/month, set by Bo 6 Oct 2026
+  08:17. Change a monthly room here and there together.
 - The top counts (ห้องออกวันนี้ / ห้องพักต่อ / รวม) come from the NUMBER OF ROOMS IN THE TWO PDFs,
   not from room statuses: ห้องพักต่อ = in-house rows − departure rows. A monthly room on the
   in-house report counts in ห้องพักต่อ (occupied, not a departure) — intended.
