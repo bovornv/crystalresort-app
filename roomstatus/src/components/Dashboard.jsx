@@ -81,6 +81,10 @@ const LoginModal = ({ onLogin }) => {
   );
 };
 
+// Monthly-stay rooms (ห้องรายเดือน): kept gray (long_stay) by the Expected Departure PDF
+// upload and by ลบข้อมูล. One list, so the two cannot disagree.
+const LONG_STAY_ROOMS = ["503", "505", "608"];
+
 const thaiDays = [
   "วันอาทิตย์", "วันจันทร์", "วันอังคาร", "วันพุธ", "วันพฤหัสบดี", "วันศุกร์", "วันเสาร์"
 ];
@@ -1327,7 +1331,7 @@ const Dashboard = () => {
       // Expected Departure PDF = yellow (will_depart_today)
       // After Expected Departure PDF upload, ALWAYS assign gray-200 (long_stay) to long-stay rooms: 503, 505, 608
       // Calculate updated rooms first, then update state
-      const longStayRooms = ["503", "505", "608"];
+      const longStayRooms = LONG_STAY_ROOMS;
       const updatedRooms = rooms.map(r => {
         // Convert to string for comparison
         const roomNumStr = String(r.number);
@@ -1863,7 +1867,23 @@ const Dashboard = () => {
       // - Change color to white (vacant)
       // - Delete nicknames/usernames on every room card regardless of status
       // - Do NOT delete remark box info
+      // - Monthly-stay rooms (LONG_STAY_ROOMS) stay gray (long_stay), as the confirm text says
       const clearedRooms = rooms.map(r => {
+        if (LONG_STAY_ROOMS.includes(String(r.number))) {
+          const kept = {
+            ...r,
+            status: "long_stay", // ห้องรายเดือน — not reset to vacant
+            maid: "",
+            lastEditor: "",
+            selectedBy: "",
+            cleanedBy: "",
+            cleanedToday: false,
+            border: "black",
+            remark: r.remark || ""
+          };
+          delete kept.vacantSince; // an occupied monthly room has no vacant-since time
+          return kept;
+        }
         return {
           ...r,
           status: "vacant", // ALL rooms become white (vacant)
@@ -1906,7 +1926,7 @@ const Dashboard = () => {
       // Write rooms to Supabase immediately for real-time sync
       await updateSupabaseImmediately(clearedRooms);
       console.log("✅ Clear rooms data synced to Supabase");
-      console.log(`Cleared ${clearedRooms.filter(r => r.status === "vacant").length} rooms to vacant`);
+      console.log(`Cleared ${clearedRooms.filter(r => r.status === "vacant").length} rooms to vacant; kept ${clearedRooms.filter(r => r.status === "long_stay").length} monthly rooms gray`);
 
       // --- Clear all common area data ---
       // Check if Supabase is configured
