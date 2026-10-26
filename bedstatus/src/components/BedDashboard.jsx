@@ -202,20 +202,20 @@ const BedDashboard = () => {
         {/* Legend */}
         <div className="mt-8 bg-white rounded-2xl p-4 shadow-md max-w-2xl mx-auto">
           <h3 className="font-semibold text-[#15803D] mb-3 text-base">
-            หมายเหตุ: ควรหมุนเตียงทุก 3 เดือน
+            หมายเหตุ: ควรหมุนเตียงทุก 4 เดือน
           </h3>
           <ul className="text-sm space-y-2">
             <li className="flex items-center gap-2">
-              <span className="inline-block w-5 h-5 rounded bg-green-300 border border-green-600" />
-              <span>เขียว = หมุนเตียงมาไม่เกิน 40 วัน</span>
+              <span className="inline-block w-5 h-5 rounded bg-red-300 border border-red-600" />
+              <span>แดง = หมุนเตียงมาแล้ว 120 วันขึ้นไป (ควรหมุนเตียงแล้ว)</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="inline-block w-5 h-5 rounded bg-yellow-200 border border-yellow-500" />
-              <span>เหลือง = หมุนเตียงมาแล้ว 41–89 วัน</span>
+              <span>เหลือง = หมุนเตียงมาแล้ว 61–119 วัน</span>
             </li>
             <li className="flex items-center gap-2">
-              <span className="inline-block w-5 h-5 rounded bg-red-300 border border-red-600" />
-              <span>แดง = หมุนเตียงมาแล้ว 90 วันขึ้นไป (ควรหมุนเตียงแล้ว)</span>
+              <span className="inline-block w-5 h-5 rounded bg-green-300 border border-green-600" />
+              <span>เขียว = หมุนเตียงมาไม่เกิน 60 วัน</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="inline-block w-5 h-5 rounded bg-gray-200 border border-gray-400" />

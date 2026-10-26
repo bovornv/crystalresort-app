@@ -2,11 +2,14 @@ import React from "react";
 import { formatShortBuddhistDate, daysSince } from "../utils/thaiDate";
 
 // Returns Tailwind classes for the box background based on days since
-// the bed was rotated. Same thresholds as airconstatus (40 / 89 / 90).
+// the bed was rotated. Rotate every 4 months (26 Oct 2026, Bo): green ≤ 60,
+// yellow 61–119, red ≥ 120 — the legend in BedDashboard.jsx states the same.
+const GREEN_MAX_DAYS = 60;
+const YELLOW_MAX_DAYS = 119;
 function colorFor(days) {
   if (days == null) return "bg-gray-200 border-gray-400";
-  if (days <= 40) return "bg-green-300 border-green-600";
-  if (days <= 89) return "bg-yellow-200 border-yellow-500";
+  if (days <= GREEN_MAX_DAYS) return "bg-green-300 border-green-600";
+  if (days <= YELLOW_MAX_DAYS) return "bg-yellow-200 border-yellow-500";
   return "bg-red-300 border-red-600";
 }
 
